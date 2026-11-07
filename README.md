@@ -67,7 +67,7 @@ python -m venv .venv
 .venv\Scripts\python build.py
 ```
 
-This downloads ffmpeg and ExifTool into `tools\`, builds `dist\dl_remove_metadata\dl_remove_metadata.exe`, and zips it as `dist\dl_remove_metadata-windows.zip` (the file to attach to a GitHub release, tagged `v<version>` matching `APP_VERSION` in `dlrm/common.py`).
+This downloads ffmpeg and ExifTool into `tools\`, builds `dist\Windows\dl_remove_metadata\dl_remove_metadata.exe`, and zips it as `dist\Windows\dl_remove_metadata-windows.zip` (the file to attach to a GitHub release, tagged `v<version>` matching `APP_VERSION` in `dlrm/common.py`).
 
 Run from source without building: `.venv\Scripts\python run.py` (after `build.py` has fetched `tools\` once).
 Command line: `.venv\Scripts\python -m dlrm --cli --check <files>` or `--cli <files>` to clean.
