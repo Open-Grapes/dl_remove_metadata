@@ -1,4 +1,4 @@
-"""Metadata removal and AI-tag checking for Windows.
+"""Metadata removal and AI-tag checking (Windows and macOS).
 
 Clean copies are written next to each original (or into an output folder): clip.mp4 -> clip_camo.mp4.
 Originals are never modified.
@@ -12,7 +12,7 @@ import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from .common import (AUDIO_EXT, IMAGE_EXT, SUFFIX, SUP, TOOLS, APP_DIR, VIDEO_EXT, log, run)
+from .common import (AUDIO_EXT, EXE, IMAGE_EXT, IS_WIN, SUFFIX, SUP, TOOLS, APP_DIR, VIDEO_EXT, log, run)
 
 # ---------------------------------------------------------------- tools
 
@@ -34,11 +34,11 @@ def reset_tool_cache():
 
 
 def find_ffmpeg():
-    """Newest working ffmpeg: an updated copy in %LOCALAPPDATA% first, then the bundled one, then PATH."""
+    """Newest working ffmpeg: an updated copy in the per-user folder first, then the bundled one, then PATH."""
     global _ffmpeg, _tried_update
     if _ffmpeg:
         return _ffmpeg
-    for c in (SUP / "bin" / "ffmpeg.exe", TOOLS / "ffmpeg.exe", shutil.which("ffmpeg")):
+    for c in (SUP / "bin" / f"ffmpeg{EXE}", TOOLS / f"ffmpeg{EXE}", shutil.which("ffmpeg")):
         if c and Path(c).is_file() and _works([str(c), "-hide_banner", "-version"]):
             _ffmpeg = str(c)
             return _ffmpeg
@@ -50,25 +50,37 @@ def find_ffmpeg():
     return None
 
 
+def _exiftool_cmd(c):
+    """Command list that runs exiftool at c: the Windows .exe directly, the Perl script through perl."""
+    if IS_WIN or str(c).lower().endswith(".exe"):
+        return [str(c)]
+    perl = "/usr/bin/perl" if Path("/usr/bin/perl").exists() else (shutil.which("perl") or "perl")
+    return [perl, str(c)]
+
+
 def find_exiftool():
+    """Command list for a working exiftool, or None."""
     global _exiftool
     if _exiftool:
         return _exiftool
-    for c in (SUP / "exiftool" / "exiftool.exe", TOOLS / "exiftool" / "exiftool.exe", shutil.which("exiftool")):
-        if c and Path(c).is_file() and _works([str(c), "-ver"]):
-            _exiftool = str(c)
-            return _exiftool
+    name = f"exiftool{EXE}"
+    for c in (SUP / "exiftool" / name, TOOLS / "exiftool" / name, shutil.which("exiftool")):
+        if c and Path(c).is_file():
+            cmd = _exiftool_cmd(c) if Path(c).parent.name == "exiftool" else [str(c)]
+            if _works(cmd + ["-ver"]):
+                _exiftool = cmd
+                return _exiftool
     return None
 
 
 def exiftool(args, timeout=600):
-    """Run exiftool with arguments passed through a UTF-8 argfile, so any file name works on Windows."""
+    """Run exiftool with arguments passed through a UTF-8 argfile, so any file name works."""
     fd, argfile = tempfile.mkstemp(prefix="dlrm-", suffix=".args")
     try:
         with os.fdopen(fd, "w", encoding="utf-8") as fh:
             for a in args:
                 fh.write(str(a).replace("\n", " ") + "\n")
-        p = run([find_exiftool(), "-charset", "filename=utf8", "-@", argfile], timeout=timeout)
+        p = run(find_exiftool() + ["-charset", "filename=utf8", "-@", argfile], timeout=timeout)
         return p.returncode, p.stdout.decode("utf-8", "replace"), p.stderr.decode("utf-8", "replace")
     finally:
         try:

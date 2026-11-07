@@ -1,11 +1,18 @@
 """Light and dark looks for the window (ttk). Light uses the native Windows style; dark uses 'clam' recoloured."""
 
 import ctypes
+import os
+import sys
 import tkinter as tk
 from tkinter import ttk
 
+IS_WIN, IS_MAC = os.name == "nt", sys.platform == "darwin"
+UI = "Segoe UI" if IS_WIN else "Helvetica Neue" if IS_MAC else "DejaVu Sans"
+MONO = "Consolas" if IS_WIN else "Menlo" if IS_MAC else "DejaVu Sans Mono"
+_S = 0 if IS_WIN else 3   # macOS text needs to be a few points larger to look the same
+
 LIGHT = {
-    "dark": False, "bg": "SystemButtonFace", "panel": "#f3f4f6", "field": "#ffffff", "text": "#1d2330",
+    "dark": False, "bg": "SystemButtonFace" if IS_WIN else "systemWindowBackgroundColor" if IS_MAC else "#ececec", "panel": "#f3f4f6", "field": "#ffffff", "text": "#1d2330",
     "muted": "#555b66", "faint": "#777d88", "line": "#d0d4da", "accent": "#205cd6",
     "tags": {"AI": "#c62828", "META": "#b45309", "CLEAN": "#2e7d32", "OK": "#2e7d32", "FAIL": "#c62828",
              "SKIP": "#6b7280"},
@@ -33,7 +40,7 @@ def apply(root, dark):
         style.configure(".", background=bg, foreground=text, fieldbackground=field, bordercolor=line,
                         darkcolor=bg, lightcolor=bg, troughcolor=panel, focuscolor=p["accent"],
                         selectbackground=p["select"], selectforeground=text, insertcolor=text,
-                        font=("Segoe UI", 9))
+                        font=(UI, 9 + _S))
         style.map(".", foreground=[("disabled", p["faint"])])
         style.configure("TButton", background=panel, bordercolor=line, padding=(10, 4), relief="flat")
         style.map("TButton", background=[("pressed", p["pressed"]), ("active", p["hover"]), ("disabled", bg)],
@@ -57,11 +64,12 @@ def apply(root, dark):
         style.configure("Drop.TLabel", background=panel, bordercolor=line)
     else:
         # ttk keeps settings per theme, so the dark colours above don't leak into the native look.
-        style.theme_use("vista" if "vista" in style.theme_names() else "winnative")
-    style.configure("Drop.TLabel", font=("Segoe UI", 13), foreground=p["muted"], anchor="center")
+        names = style.theme_names()
+        style.theme_use(next(t for t in ("vista", "aqua", "winnative", "clam") if t in names))
+    style.configure("Drop.TLabel", font=(UI, 13 + _S), foreground=p["muted"], anchor="center")
     style.configure("Muted.TLabel", foreground=p["muted"])
-    style.configure("Small.TLabel", foreground=p["faint"], font=("Segoe UI", 8))
-    style.configure("Title.TLabel", font=("Segoe UI", 11, "bold"))
+    style.configure("Small.TLabel", foreground=p["faint"], font=(UI, 8 + _S))
+    style.configure("Title.TLabel", font=(UI, 11 + _S, "bold"))
     style.configure("Treeview", rowheight=26)
     root.configure(bg=p["bg"])
     for w in _toplevels(root):
@@ -82,7 +90,9 @@ def _toplevels(root):
 
 
 def title_bar(win, dark):
-    """Ask Windows 10/11 to draw this window's title bar dark (or light)."""
+    """Ask Windows 10/11 to draw this window's title bar dark (or light). (macOS: follows the system.)"""
+    if not IS_WIN:
+        return
     try:
         win.update_idletasks()
         hwnd = ctypes.windll.user32.GetParent(win.winfo_id())

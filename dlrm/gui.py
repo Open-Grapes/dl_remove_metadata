@@ -9,7 +9,9 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
 from . import engine, shell, theme, updater
-from .common import APP_DIR, APP_NAME, APP_VERSION, LOG, load_settings, save_settings
+from .common import (APP_DIR, APP_NAME, APP_VERSION, FILE_MANAGER, IS_MAC, IS_WIN, LOG, load_settings,
+                     save_settings)
+from .theme import MONO, UI
 
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
@@ -34,13 +36,35 @@ def set_icon(win):
 
 
 def open_in_explorer(path):
+    """Show a file in Explorer / Finder (or open a folder)."""
     p = Path(path)
     try:
-        if p.is_file():
+        if IS_MAC:
+            subprocess.Popen(["open", "-R", str(p)] if p.is_file() else ["open", str(p if p.exists() else p.parent)])
+        elif p.is_file():
             subprocess.Popen(["explorer", "/select,", str(p)])
         else:
             os.startfile(str(p if p.exists() else p.parent))
     except OSError:
+        pass
+
+
+def open_file(path):
+    try:
+        subprocess.Popen(["open", str(path)]) if IS_MAC else os.startfile(str(path))
+    except OSError:
+        pass
+
+
+def sound(ok):
+    try:
+        if IS_WIN:
+            import winsound
+            winsound.MessageBeep(winsound.MB_OK if ok else winsound.MB_ICONHAND)
+        elif IS_MAC:
+            name = "Glass" if ok else "Basso"
+            subprocess.Popen(["/usr/bin/afplay", f"/System/Library/Sounds/{name}.aiff"])
+    except Exception:
         pass
 
 
@@ -64,6 +88,8 @@ class App(BaseTk):
         self.after(100, self._pump)
         self.after(300, self._startup)
         self.after(60, lambda: theme.title_bar(self, self.dark))
+        if IS_MAC:   # files dropped on the Dock icon, or "Open With"
+            self.createcommand("::tk::mac::OpenDocument", lambda *paths: self.add(paths))
         if files:
             self.after(400, lambda: self.add(files))
 
@@ -111,7 +137,7 @@ class App(BaseTk):
         act.pack(fill="x")
         self.details_btn = ttk.Button(act, text="Details…", command=self.details)
         self.clean_sel_btn = ttk.Button(act, text="Remove Metadata from Selected", command=self.clean_selected)
-        self.open_btn = ttk.Button(act, text="Show in Explorer", command=self.show_selected)
+        self.open_btn = ttk.Button(act, text=f"Show in {FILE_MANAGER}", command=self.show_selected)
         self.open_btn.pack(side="left")
         self.status = ttk.Label(act, style="Muted.TLabel")
         self.status.pack(side="right")
@@ -123,7 +149,7 @@ class App(BaseTk):
         self.update_now_btn = ttk.Button(bottom, text="Update Now", command=self.update_now)
         ttk.Button(bottom, text="Check for Updates", command=self.check_updates).pack(side="right")
         self.menu_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(bottom, text="Right-click menu", variable=self.menu_var,
+        ttk.Checkbutton(bottom, text="Finder Quick Actions" if IS_MAC else "Right-click menu", variable=self.menu_var,
                         command=self.toggle_menu).pack(side="right", padx=10)
 
         if DND_FILES:
@@ -162,6 +188,7 @@ class App(BaseTk):
 
     # ------------------------------------------------------------ startup / updates
     def _startup(self):
+        shell.clear_quarantine()
         if self.settings.get("menu", True):
             try:
                 shell.install_menu()
@@ -308,7 +335,10 @@ class App(BaseTk):
         messagebox.showinfo("Check for Updates", msg or "Done.")
 
     def _ev_app_update(self, err):
-        if err:
+        if err and IS_MAC and err.startswith("Version "):   # macOS: the new .dmg was downloaded and opened
+            self.status.configure(text="")
+            messagebox.showinfo(APP_NAME, err)
+        elif err:
             self.status.configure(text="")
             messagebox.showerror(APP_NAME, err)
         else:
@@ -384,7 +414,7 @@ class App(BaseTk):
         win.title(f"Details — {Path(res.file).name}")
         win.geometry("760x420")
         p = self.pal
-        txt = tk.Text(win, wrap="word", font=("Consolas", 9), padx=8, pady=8, relief="flat",
+        txt = tk.Text(win, wrap="word", font=(MONO, 9 if IS_WIN else 11), padx=8, pady=8, relief="flat",
                       bg=p["field"], fg=p["text"], insertbackground=p["text"], selectbackground=p.get("select", "#cce0ff"))
         sb = ttk.Scrollbar(win, command=txt.yview)
         txt.configure(yscrollcommand=sb.set)
@@ -392,7 +422,7 @@ class App(BaseTk):
         txt.pack(fill="both", expand=True)
         txt.tag_configure("ai", foreground=p["tags"]["AI"])
         txt.tag_configure("info", foreground=p["tags"]["META"])
-        txt.tag_configure("h", font=("Segoe UI", 10, "bold"))
+        txt.tag_configure("h", font=(UI, 10 if IS_WIN else 13, "bold"))
         txt.insert("end", res.file + "\n\n", "h")
         tags = getattr(res, "tags", None)
         if tags:
@@ -437,7 +467,7 @@ class App(BaseTk):
 # ---------------------------------------------------------------- right-click "Remove Metadata"
 
 class QuickWindow(tk.Tk):
-    """Small progress window for the Explorer right-click action."""
+    """Small progress window for the right-click action (Explorer menu / Finder Quick Action)."""
 
     def __init__(self, items):
         super().__init__()
@@ -495,7 +525,6 @@ class QuickWindow(tk.Tk):
         self.after(100, self._pump)
 
     def _finish(self, results):
-        import winsound
         self.bar.stop()
         self.bar.configure(mode="determinate", maximum=1, value=1)
         ok = [r for r in results if r.status == "OK"]
@@ -503,8 +532,8 @@ class QuickWindow(tk.Tk):
         if fail:
             self.title_lbl.configure(text=f"{len(ok)} cleaned, {len(fail)} failed")
             self.file_lbl.configure(text=f"e.g. {Path(fail[-1].file).name}: {fail[-1].reason}"[:120])
-            ttk.Button(self.btns, text="Open log", command=lambda: os.startfile(str(LOG))).pack(side="left")
-            winsound.MessageBeep(winsound.MB_ICONHAND)
+            ttk.Button(self.btns, text="Open log", command=lambda: open_file(LOG)).pack(side="left")
+            sound(False)
         elif not ok:
             self.title_lbl.configure(text="No videos, audio or images to clean.")
             self.file_lbl.configure(text="")
@@ -513,10 +542,10 @@ class QuickWindow(tk.Tk):
             self.title_lbl.configure(text=f"Metadata removed from {len(ok)} {word}.")
             self.file_lbl.configure(text=f"Saved as {Path(ok[-1].output).name}" if len(ok) == 1 else
                                     f"Clean copies end in _camo")
-            winsound.MessageBeep(winsound.MB_OK)
+            sound(True)
             self.after(8000, self.destroy)
         if ok:
-            ttk.Button(self.btns, text="Show in Explorer",
+            ttk.Button(self.btns, text=f"Show in {FILE_MANAGER}",
                        command=lambda: open_in_explorer(ok[-1].output)).pack(side="left", padx=(6, 0))
         ttk.Button(self.btns, text="Close", command=self.destroy).pack(side="right")
         updater.start_background_check()

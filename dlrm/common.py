@@ -14,6 +14,7 @@ APP_VERSION = "1.0.0"
 # with dl_remove_metadata-windows.zip attached). Used for "Update Now".
 GITHUB_REPO = "Open-Grapes/dl_remove_metadata"
 RELEASE_ASSET = "dl_remove_metadata-windows.zip"
+MAC_ASSETS = {"arm64": "dl_remove_metadata-mac-apple-silicon.dmg", "x86_64": "dl_remove_metadata-mac-intel.dmg"}
 
 # Where "Check for Updates" downloads the newest AI tag list from.
 RULES_URL = "https://raw.githubusercontent.com/abrahamyuen/wunderpus/main/detect_rules.txt"
@@ -26,14 +27,32 @@ AUDIO_EXT = {"mp3", "wav", "m4a", "aac", "flac", "ogg", "opus", "aif", "aiff", "
 IMAGE_EXT = {"jpg", "jpeg", "png", "heic", "heif", "webp", "tif", "tiff", "gif", "avif", "dng", "jxl"}
 
 FROZEN = getattr(sys, "frozen", False)
-# Folder holding the program (the .exe when built, the repo root when run from source).
-APP_DIR = Path(sys.executable).resolve().parent if FROZEN else Path(__file__).resolve().parent.parent
+IS_WIN = os.name == "nt"
+IS_MAC = sys.platform == "darwin"
+EXE = ".exe" if IS_WIN else ""
+
+if FROZEN and IS_MAC:
+    # dl_remove_metadata.app/Contents/MacOS/dl_remove_metadata -> resources live in Contents/Resources
+    APP_BUNDLE = Path(sys.executable).resolve().parents[2]
+    APP_DIR = APP_BUNDLE / "Contents" / "Resources"
+elif FROZEN:
+    APP_BUNDLE = None
+    APP_DIR = Path(sys.executable).resolve().parent          # folder holding the .exe
+else:
+    APP_BUNDLE = None
+    APP_DIR = Path(__file__).resolve().parent.parent         # repo root when run from source
 TOOLS = APP_DIR / "tools"
-# Per-user data: updated tools, downloaded rules, settings, log.
-SUP = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / APP_NAME
+# Per-user data on this computer: updated tools, downloaded rules, settings, log.
+if IS_MAC:
+    SUP = Path.home() / "Library" / "Application Support" / APP_NAME
+elif IS_WIN:
+    SUP = Path(os.environ.get("LOCALAPPDATA") or Path.home() / "AppData" / "Local") / APP_NAME
+else:
+    SUP = Path(os.environ.get("XDG_DATA_HOME") or Path.home() / ".local" / "share") / APP_NAME
 LOG = SUP / f"{APP_NAME}.log"
 
-CREATE_NO_WINDOW = 0x08000000 if os.name == "nt" else 0
+CREATE_NO_WINDOW = 0x08000000 if IS_WIN else 0
+FILE_MANAGER = "Finder" if IS_MAC else "Explorer"
 
 
 def ensure_dirs():

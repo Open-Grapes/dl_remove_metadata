@@ -4,3 +4,5 @@ dist/
 tools/
 __pycache__/
 *.pyc
+tools-mac/
+build-mac/

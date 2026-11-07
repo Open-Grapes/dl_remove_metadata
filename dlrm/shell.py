@@ -1,6 +1,7 @@
-"""Explorer right-click menu ("Remove Metadata", "Check for AI Tags") and batching of multi-file selections.
+"""Right-click menu ("Remove Metadata", "Check for AI Tags"): Explorer verbs on Windows, Finder Quick Actions
+on macOS. Also batching of multi-file selections on Windows.
 
-Explorer starts the program once per selected file. Each start drops its file into a queue folder;
+Windows Explorer starts the program once per selected file. Each start drops its file into a queue folder;
 whichever start holds a named mutex collects the whole batch and handles it in one go.
 """
 
@@ -11,7 +12,7 @@ import time
 import uuid
 from pathlib import Path
 
-from .common import APP_DIR, APP_NAME, FROZEN, SUP
+from .common import APP_BUNDLE, APP_DIR, APP_NAME, FROZEN, IS_MAC, SUP
 
 QUEUE = SUP / "queue"
 MUTEX_NAME = f"Local\\{APP_NAME}-queue"
@@ -36,6 +37,8 @@ def icon_path():
 
 def install_menu():
     """Create or refresh the right-click entries (current user only, no admin needed)."""
+    if IS_MAC:
+        return _mac_install()
     import winreg
     for base in KEYS:
         for mode, label in VERBS.items():
@@ -51,6 +54,8 @@ def install_menu():
 
 
 def remove_menu():
+    if IS_MAC:
+        return _mac_remove()
     import winreg
     for base in KEYS:
         for mode in VERBS:
@@ -63,6 +68,8 @@ def remove_menu():
 
 
 def menu_installed():
+    if IS_MAC:
+        return _mac_installed()
     import winreg
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, f"{KEYS[0]}\\{APP_NAME}.remove\\command") as k:
@@ -120,3 +127,71 @@ def collect_batch(settle=1.0, max_wait=10.0):
     finally:
         k32.ReleaseMutex(h)
         k32.CloseHandle(h)
+
+
+# ---------------------------------------------------------------- macOS Finder Quick Actions
+
+SERVICES = Path.home() / "Library" / "Services"
+MAC_SCRIPT = """# dl_remove_metadata — {menu} Quick Action
+CONF="$HOME/Library/Application Support/dl_remove_metadata/app_path"
+APP=""
+[ -f "$CONF" ] &amp;&amp; APP="$(cat "$CONF")"
+BIN="$APP/Contents/MacOS/dl_remove_metadata"
+[ -x "$BIN" ] || BIN="/Applications/dl_remove_metadata.app/Contents/MacOS/dl_remove_metadata"
+if [ ! -x "$BIN" ]; then
+  /usr/bin/osascript -e 'display alert "dl_remove_metadata not found" message "Open the dl_remove_metadata app once so this menu can find it again."'
+  exit 0
+fi
+nohup "$BIN" --quick {mode} "$@" &lt;/dev/null &gt;/dev/null 2&gt;&amp;1 &amp;
+"""
+
+
+def _workflow_dir(mode):
+    return SERVICES / f"{VERBS[mode]}.workflow"
+
+
+def _mac_templates():
+    base = APP_DIR / "assets" / "mac"
+    return ((base / "document.wflow.template").read_text(encoding="utf-8"),
+            (base / "Info.plist.template").read_text(encoding="utf-8"))
+
+
+def _mac_install():
+    """Install both Quick Actions into ~/Library/Services and remember where the app is."""
+    import subprocess
+    SUP.mkdir(parents=True, exist_ok=True)
+    if APP_BUNDLE:
+        (SUP / "app_path").write_text(str(APP_BUNDLE), encoding="utf-8")
+    doc_t, info_t = _mac_templates()
+    changed = False
+    for mode, menu in VERBS.items():
+        d = _workflow_dir(mode) / "Contents"
+        doc = doc_t.replace("@@SCRIPT@@", MAC_SCRIPT.format(menu=menu, mode=mode))
+        info = info_t.replace("@@MENU@@", menu)
+        cur = (d / "document.wflow").read_text(encoding="utf-8") if (d / "document.wflow").exists() else ""
+        if cur != doc:
+            d.mkdir(parents=True, exist_ok=True)
+            (d / "document.wflow").write_text(doc, encoding="utf-8")
+            (d / "Info.plist").write_text(info, encoding="utf-8")
+            changed = True
+    if changed:   # make Finder notice the new menu items
+        subprocess.run(["/System/Library/CoreServices/pbs", "-flush"], capture_output=True)
+
+
+def _mac_remove():
+    import shutil
+    import subprocess
+    for mode in VERBS:
+        shutil.rmtree(_workflow_dir(mode), ignore_errors=True)
+    subprocess.run(["/System/Library/CoreServices/pbs", "-flush"], capture_output=True)
+
+
+def _mac_installed():
+    return all((_workflow_dir(m) / "Contents" / "document.wflow").exists() for m in VERBS)
+
+
+def clear_quarantine():
+    """macOS: let the bundled ffmpeg / exiftool run after the app was downloaded (like 'Open Anyway')."""
+    if IS_MAC and APP_BUNDLE:
+        import subprocess
+        subprocess.run(["/usr/bin/xattr", "-dr", "com.apple.quarantine", str(APP_BUNDLE)], capture_output=True)

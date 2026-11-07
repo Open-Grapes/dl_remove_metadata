@@ -1,0 +1,41 @@
+name: Build macOS app
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15          # Apple Silicon
+            arch: apple-silicon
+          - runner: macos-15-intel    # Intel
+            arch: intel
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install build tools
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -c "import tkinter; print('Tk', tkinter.TkVersion)"
+
+      - name: Build, smoke-test and package
+        run: python build_mac.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dl_remove_metadata-mac-${{ matrix.arch }}
+          path: dist/MacOS/*.dmg
+          if-no-files-found: error
+          retention-days: 30

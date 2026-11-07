@@ -2,7 +2,8 @@
 
   dl_remove_metadata.exe                        open the window
   dl_remove_metadata.exe FILE|FOLDER ...        open the window and clean these (drag onto the .exe)
-  dl_remove_metadata.exe --queue remove|check PATH   used by the Explorer right-click menu
+  dl_remove_metadata.exe --queue remove|check PATH   used by the Explorer right-click menu (Windows)
+  dl_remove_metadata --quick remove|check PATH ...  used by the Finder Quick Actions (macOS)
   dl_remove_metadata.exe --web                  local web version: opens a page in the browser
   dl_remove_metadata.exe --auto-update         weekly background update check (silent)
   dl_remove_metadata.exe --install-menu | --remove-menu
@@ -68,6 +69,13 @@ def main(argv=None):
     if args[:1] in (["--install-menu"], ["--remove-menu"]):
         from . import shell
         shell.install_menu() if args[0] == "--install-menu" else shell.remove_menu()
+        return 0
+    if args[:1] == ["--quick"] and len(args) >= 3:   # macOS Finder Quick Actions pass every file at once
+        from . import gui
+        if args[1] == "check":
+            gui.App(args[2:], mode="check").mainloop()
+        else:
+            gui.QuickWindow(args[2:]).mainloop()
         return 0
     if args[:1] == ["--queue"] and len(args) >= 3:
         from . import shell

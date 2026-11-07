@@ -1,23 +1,26 @@
 """Keeps ffmpeg, exiftool and the AI tag list current, and checks GitHub for a newer dl_remove_metadata.
 
-Updated copies go to %LOCALAPPDATA%\\dl_remove_metadata, so the program folder itself is never modified
-(and the bundled versions remain as a fallback). Also used by build.py to fetch the bundled tools.
+Updated copies go to the per-user folder (%LOCALAPPDATA%\\dl_remove_metadata on Windows,
+~/Library/Application Support/dl_remove_metadata on macOS), so the program itself is never modified
+(and the bundled versions remain as a fallback). Also used by build.py / build_mac.py to fetch the bundled tools.
 """
 
 import io
 import os
+import platform
 import re
 import shutil
 import subprocess
 import sys
 import tempfile
+import tarfile
 import time
 import urllib.request
 import zipfile
 from pathlib import Path
 
-from .common import (APP_DIR, APP_NAME, APP_VERSION, FROZEN, GITHUB_REPO, RELEASE_ASSET, RULES_URL, SUP, TOOLS,
-                     log, run)
+from .common import (APP_BUNDLE, APP_DIR, APP_NAME, APP_VERSION, EXE, FROZEN, GITHUB_REPO, IS_MAC, MAC_ASSETS,
+                     RELEASE_ASSET, RULES_URL, SUP, TOOLS, log, run)
 
 UA = {"User-Agent": f"{APP_NAME}-updater"}
 STAMP = SUP / "last_update_check"
@@ -30,6 +33,14 @@ FFMPEG_ZIPS = ["https://github.com/GyanD/codexffmpeg/releases/download/{v}/ffmpe
 EXIFTOOL_VERSION_URL = "https://exiftool.org/ver.txt"
 EXIFTOOL_ZIPS = ["https://exiftool.org/exiftool-{v}_64.zip",
                  "https://sourceforge.net/projects/exiftool/files/exiftool-{v}_64.zip/download"]
+# macOS: static, signed ffmpeg builds by Martin Riedl; ExifTool's Perl package (macOS ships perl).
+MAC_FFMPEG = "https://ffmpeg.martin-riedl.de/redirect/latest/macos/{arch}/release/ffmpeg.zip"
+EXIFTOOL_TARS = ["https://exiftool.org/Image-ExifTool-{v}.tar.gz",
+                 "https://sourceforge.net/projects/exiftool/files/Image-ExifTool-{v}.tar.gz/download"]
+
+
+def mac_arch():
+    return "arm64" if platform.machine().lower() in ("arm64", "aarch64") else "x86_64"
 
 
 def fetch(url, timeout=30):
@@ -63,14 +74,46 @@ def _read(p):
 
 # ---------------------------------------------------------------- ffmpeg
 
+_mac_ff_url = ""
+
+
 def latest_ffmpeg():
+    """Newest ffmpeg release version number."""
+    global _mac_ff_url
+    if IS_MAC:
+        u = final_url(MAC_FFMPEG.format(arch="arm64" if mac_arch() == "arm64" else "amd64"), timeout=30)
+        m = re.search(r"_(\d+(?:\.\d+)+)/", u)
+        _mac_ff_url = u
+        return m.group(1) if m else ""
     return fetch_text(FFMPEG_VERSION_URL).strip()
 
 
+def _install_ffmpeg_mac(dest, version):
+    url = _mac_ff_url or MAC_FFMPEG.format(arch="arm64" if mac_arch() == "arm64" else "amd64")
+    try:
+        with zipfile.ZipFile(io.BytesIO(fetch(url, timeout=900))) as z:
+            name = next(n for n in z.namelist() if n.rstrip("/").split("/")[-1] == "ffmpeg")
+            tmp = dest / "ffmpeg.new"
+            tmp.write_bytes(z.read(name))
+        tmp.chmod(0o755)
+        if run([str(tmp), "-hide_banner", "-version"], timeout=30).returncode != 0:
+            tmp.unlink(missing_ok=True)
+            return False
+        os.replace(tmp, dest / "ffmpeg")
+        (dest / "ffmpeg.version").write_text(version, encoding="utf-8")
+        return True
+    except Exception as e:
+        log(f"update: ffmpeg download from {url} failed: {e}")
+        return False
+
+
 def install_ffmpeg(dest, version):
-    """Download the gyan.dev 'essentials' build of `version` into dest/ffmpeg.exe. Returns True on success."""
+    """Download ffmpeg `version` into dest/ffmpeg(.exe): gyan.dev 'essentials' on Windows, Martin Riedl's
+    build on macOS. Returns True on success."""
     dest = Path(dest)
     dest.mkdir(parents=True, exist_ok=True)
+    if IS_MAC:
+        return _install_ffmpeg_mac(dest, version)
     for url in FFMPEG_ZIPS:
         try:
             data = fetch(url.format(v=version), timeout=900)
@@ -101,15 +144,19 @@ def latest_exiftool():
 
 
 def exiftool_version(exe):
+    from .engine import _exiftool_cmd
     try:
-        return run([str(exe), "-ver"], timeout=60).stdout.decode().strip()
+        return run(_exiftool_cmd(exe) + ["-ver"], timeout=60).stdout.decode().strip()
     except Exception:
         return ""
 
 
 def install_exiftool(dest, version):
-    """Download the Windows exiftool package into dest/ (exiftool.exe + exiftool_files). Returns version or ''."""
+    """Download exiftool into dest/: the Windows package (exiftool.exe + exiftool_files), or on macOS the
+    Perl package (exiftool + lib). Returns the version, or ''."""
     dest = Path(dest)
+    if IS_MAC:
+        return _install_exiftool_mac(dest, version)
     for url in EXIFTOOL_ZIPS:
         work = Path(tempfile.mkdtemp(prefix="dlrm-et-"))
         try:
@@ -133,6 +180,42 @@ def install_exiftool(dest, version):
             dest.parent.mkdir(parents=True, exist_ok=True)
             shutil.move(str(out), str(dest))
             shutil.rmtree(old, ignore_errors=True)
+            return v
+        except Exception as e:
+            log(f"update: exiftool download from {url} failed: {e}")
+        finally:
+            shutil.rmtree(work, ignore_errors=True)
+    return ""
+
+
+def _swap_in(out, dest):
+    old = dest.with_name(dest.name + ".old")
+    shutil.rmtree(old, ignore_errors=True)
+    if dest.exists():
+        dest.rename(old)
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    shutil.move(str(out), str(dest))
+    shutil.rmtree(old, ignore_errors=True)
+
+
+def _install_exiftool_mac(dest, version):
+    for url in EXIFTOOL_TARS:
+        work = Path(tempfile.mkdtemp(prefix="dlrm-et-"))
+        try:
+            with tarfile.open(fileobj=io.BytesIO(fetch(url.format(v=version), timeout=600)), mode="r:gz") as t:
+                t.extractall(work, filter="data")
+            script = next((p for p in work.rglob("exiftool") if p.is_file() and (p.parent / "lib").is_dir()), None)
+            if not script:
+                continue
+            out = work / "out"
+            out.mkdir()
+            shutil.copy2(script, out / "exiftool")
+            (out / "exiftool").chmod(0o755)
+            shutil.copytree(script.parent / "lib", out / "lib")
+            v = exiftool_version(out / "exiftool")
+            if not v:
+                continue
+            _swap_in(out, dest)
             return v
         except Exception as e:
             log(f"update: exiftool download from {url} failed: {e}")
@@ -256,8 +339,10 @@ def start_background_check():
     """Weekly background check, in a separate process so it outlives the caller."""
     try:
         args = [sys.executable] + ([] if FROZEN else ["-m", "dlrm"]) + ["--auto-update"]
-        subprocess.Popen(args, cwd=str(APP_DIR), creationflags=0x08000000 | 0x00000008,  # no window, detached
-                         stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        extra = ({"creationflags": 0x08000000 | 0x00000008} if os.name == "nt"   # no window, detached
+                 else {"start_new_session": True})
+        subprocess.Popen(args, cwd=str(APP_DIR), stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL,
+                         stderr=subprocess.DEVNULL, **extra)
     except OSError:
         pass
 
@@ -270,7 +355,8 @@ def github_token():
         if os.environ.get(var):
             return os.environ[var].strip()
     candidates = [shutil.which("gh"), r"C:\Program Files\GitHub CLI\gh.exe",
-                  os.path.expandvars(r"%LOCALAPPDATA%\Programs\GitHub CLI\gh.exe")]
+                  os.path.expandvars(r"%LOCALAPPDATA%\Programs\GitHub CLI\gh.exe"),
+                  "/opt/homebrew/bin/gh", "/usr/local/bin/gh"]
     for gh in candidates:
         if gh and os.path.isfile(gh):
             try:
@@ -310,15 +396,15 @@ def latest_app_version():
         return ""
 
 
-def download_release_asset(version, timeout=900):
+def download_release_asset(version, timeout=900, asset=RELEASE_ASSET):
     import json
     try:
         rel = json.loads(github_api(f"repos/{GITHUB_REPO}/releases/tags/v{version}"))
-        asset = next(a for a in rel.get("assets", []) if a.get("name") == RELEASE_ASSET)
-        return github_api(f"repos/{GITHUB_REPO}/releases/assets/{asset['id']}",
+        a = next(x for x in rel.get("assets", []) if x.get("name") == asset)
+        return github_api(f"repos/{GITHUB_REPO}/releases/assets/{a['id']}",
                           accept="application/octet-stream", timeout=timeout)
     except Exception:
-        return fetch(f"https://github.com/{GITHUB_REPO}/releases/download/v{version}/{RELEASE_ASSET}", timeout)
+        return fetch(f"https://github.com/{GITHUB_REPO}/releases/download/v{version}/{asset}", timeout)
 
 
 # ---------------------------------------------------------------- self-update
@@ -328,6 +414,8 @@ def install_app_update(version):
     Returns an error message, or '' if the app should now quit."""
     if not FROZEN:
         return "Self-update only works in the built app. Use git pull when running from source."
+    if IS_MAC:
+        return _mac_update(version)
     work = Path(tempfile.mkdtemp(prefix="dlrm-upd-"))
     try:
         with zipfile.ZipFile(io.BytesIO(download_release_asset(version))) as z:
@@ -351,3 +439,19 @@ def install_app_update(version):
     (SUP / "app_update_available").unlink(missing_ok=True)
     log(f"update: installing {APP_NAME} {version}")
     return ""
+
+
+def _mac_update(version):
+    """macOS: save the new .dmg in Downloads and open it; the user drags the app into Applications."""
+    asset = MAC_ASSETS[mac_arch()]
+    try:
+        data = download_release_asset(version, asset=asset)
+    except Exception as e:
+        return f"Download failed: {e}"
+    dmg = Path.home() / "Downloads" / asset
+    dmg.write_bytes(data)
+    subprocess.Popen(["open", str(dmg)])
+    (SUP / "app_update_available").unlink(missing_ok=True)
+    log(f"update: downloaded {asset} {version}")
+    return (f"Version {version} was saved to Downloads and opened.\n\n"
+            f"Quit {APP_NAME}, then drag the new {APP_NAME} into Applications and choose Replace.")
