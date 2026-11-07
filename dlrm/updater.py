@@ -53,7 +53,9 @@ def fetch_text(url, timeout=20):
 
 
 def final_url(url, timeout=20):
-    with urllib.request.urlopen(urllib.request.Request(url, headers=UA, method="HEAD"), timeout=timeout) as r:
+    """Where a link redirects to. Asks for just the first byte: some servers reject HEAD requests."""
+    req = urllib.request.Request(url, headers={**UA, "Range": "bytes=0-0"})
+    with urllib.request.urlopen(req, timeout=timeout) as r:
         return r.geturl()
 
 
