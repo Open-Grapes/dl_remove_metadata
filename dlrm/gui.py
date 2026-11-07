@@ -8,7 +8,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import engine, shell, updater
+from . import engine, shell, theme, updater
 from .common import APP_DIR, APP_NAME, APP_VERSION, LOG, load_settings, save_settings
 
 try:
@@ -19,8 +19,6 @@ except Exception:  # drag and drop unavailable: the window still works with the 
 
 BADGE = {"AI": "🔺 AI tags", "META": "ⓘ Other details", "CLEAN": "✅ Clean",
          "OK": "✅ Cleaned", "SKIP": "— Skipped", "FAIL": "❌ Failed", "WAIT": "…", "RUN": "⏳ Working"}
-TAG_COLORS = {"AI": "#c62828", "META": "#d97706", "CLEAN": "#2e7d32", "OK": "#2e7d32", "FAIL": "#c62828",
-              "SKIP": "#6b7280"}
 
 
 def set_icon(win):
@@ -59,23 +57,22 @@ class App(BaseTk):
         self.jobs = []
         self.rows = {}        # tree item -> {"file":..., "result":..., "sel": bool}
         self.mode = tk.StringVar(value=mode)
+        self.dark = self.settings.get("theme") == "dark"
+        self.pal = theme.apply(self, self.dark)
         self._build()
         self._refresh_outdir()
         self.after(100, self._pump)
         self.after(300, self._startup)
+        self.after(60, lambda: theme.title_bar(self, self.dark))
         if files:
             self.after(400, lambda: self.add(files))
 
     # ------------------------------------------------------------ layout
     def _build(self):
-        style = ttk.Style(self)
-        if "vista" in style.theme_names():
-            style.theme_use("vista")
-        style.configure("Drop.TLabel", font=("Segoe UI", 13), foreground="#555", anchor="center")
-        style.configure("Treeview", rowheight=26)
-
         top = ttk.Frame(self, padding=(12, 10, 12, 0))
         top.pack(fill="x")
+        self.theme_btn = ttk.Button(top, command=self.toggle_theme)
+        self.theme_btn.pack(side="left", padx=(0, 14))
         for val, text in (("remove", "Remove Metadata"), ("check", "Check for AI Tags")):
             ttk.Radiobutton(top, text=text, value=val, variable=self.mode, style="Toolbutton",
                             command=self._mode_changed).pack(side="left", padx=(0, 4), ipadx=10, ipady=3)
@@ -91,7 +88,7 @@ class App(BaseTk):
         self.reset_btn = ttk.Button(row, text="Reset", command=self.reset_outdir)
         self.reset_btn.pack(side="right")
         ttk.Button(row, text="Save to…", command=self.choose_outdir).pack(side="right", padx=6)
-        self.outdir_lbl = ttk.Label(row, foreground="#555")
+        self.outdir_lbl = ttk.Label(row, style="Muted.TLabel")
         self.outdir_lbl.pack(side="right")
 
         mid = ttk.Frame(self, padding=(12, 8))
@@ -103,8 +100,6 @@ class App(BaseTk):
                                ("folder", "Folder", 260, True)):
             self.tree.heading(c, text=text)
             self.tree.column(c, width=w, stretch=st, anchor="center" if c == "sel" else "w")
-        for k, color in TAG_COLORS.items():
-            self.tree.tag_configure(k, foreground=color)
         sb = ttk.Scrollbar(mid, orient="vertical", command=self.tree.yview)
         self.tree.configure(yscrollcommand=sb.set)
         self.tree.pack(side="left", fill="both", expand=True)
@@ -118,12 +113,12 @@ class App(BaseTk):
         self.clean_sel_btn = ttk.Button(act, text="Remove Metadata from Selected", command=self.clean_selected)
         self.open_btn = ttk.Button(act, text="Show in Explorer", command=self.show_selected)
         self.open_btn.pack(side="left")
-        self.status = ttk.Label(act, foreground="#555")
+        self.status = ttk.Label(act, style="Muted.TLabel")
         self.status.pack(side="right")
 
         bottom = ttk.Frame(self, padding=(12, 8, 12, 10))
         bottom.pack(fill="x")
-        self.versions = ttk.Label(bottom, foreground="#777", font=("Segoe UI", 8))
+        self.versions = ttk.Label(bottom, style="Small.TLabel")
         self.versions.pack(side="left")
         self.update_now_btn = ttk.Button(bottom, text="Update Now", command=self.update_now)
         ttk.Button(bottom, text="Check for Updates", command=self.check_updates).pack(side="right")
@@ -136,6 +131,21 @@ class App(BaseTk):
                 w.drop_target_register(DND_FILES)
                 w.dnd_bind("<<Drop>>", self._on_drop)
         self._mode_changed()
+        self._theme_changed()
+
+    # ------------------------------------------------------------ light / dark
+    def toggle_theme(self):
+        self.dark = not self.dark
+        self.settings["theme"] = "dark" if self.dark else "light"
+        save_settings(self.settings)          # remembered on this PC
+        self.pal = theme.apply(self, self.dark)
+        self._theme_changed()
+
+    def _theme_changed(self):
+        self.theme_btn.configure(text="Light mode" if self.dark else "Dark mode")
+        for k, color in self.pal["tags"].items():
+            self.tree.tag_configure(k, foreground=color)
+        theme.title_bar(self, self.dark)
 
     def _mode_changed(self):
         check = self.mode.get() == "check"
@@ -370,16 +380,18 @@ class App(BaseTk):
         res = row and row["result"]
         if not res:
             return
-        win = tk.Toplevel(self)
+        win = tk.Toplevel(self, bg=self.pal["bg"])
         win.title(f"Details — {Path(res.file).name}")
         win.geometry("760x420")
-        txt = tk.Text(win, wrap="word", font=("Consolas", 9), padx=8, pady=8)
+        p = self.pal
+        txt = tk.Text(win, wrap="word", font=("Consolas", 9), padx=8, pady=8, relief="flat",
+                      bg=p["field"], fg=p["text"], insertbackground=p["text"], selectbackground=p.get("select", "#cce0ff"))
         sb = ttk.Scrollbar(win, command=txt.yview)
         txt.configure(yscrollcommand=sb.set)
         sb.pack(side="right", fill="y")
         txt.pack(fill="both", expand=True)
-        txt.tag_configure("ai", foreground=TAG_COLORS["AI"])
-        txt.tag_configure("info", foreground=TAG_COLORS["META"])
+        txt.tag_configure("ai", foreground=p["tags"]["AI"])
+        txt.tag_configure("info", foreground=p["tags"]["META"])
         txt.tag_configure("h", font=("Segoe UI", 10, "bold"))
         txt.insert("end", res.file + "\n\n", "h")
         tags = getattr(res, "tags", None)
@@ -395,6 +407,7 @@ class App(BaseTk):
         else:
             txt.insert("end", getattr(res, "reason", "") or getattr(res, "output", "") or "Nothing found.")
         txt.configure(state="disabled")
+        theme.title_bar(win, self.dark)
 
     def clean_selected(self):
         files = [r["file"] for r in self.rows.values() if r["sel"]]
@@ -433,15 +446,17 @@ class QuickWindow(tk.Tk):
         self.resizable(False, False)
         self.attributes("-topmost", True)
         set_icon(self)
+        self.dark = load_settings().get("theme") == "dark"
+        theme.apply(self, self.dark)
         self.items, self.outdir = items, load_settings().get("outdir")
         if self.outdir and not Path(self.outdir).is_dir():
             self.outdir = None
         self.events = queue.Queue()
         f = ttk.Frame(self, padding=16)
         f.pack(fill="both", expand=True)
-        self.title_lbl = ttk.Label(f, text="Removing metadata…", font=("Segoe UI", 11, "bold"))
+        self.title_lbl = ttk.Label(f, text="Removing metadata…", style="Title.TLabel")
         self.title_lbl.pack(anchor="w")
-        self.file_lbl = ttk.Label(f, text="", foreground="#555", width=60)
+        self.file_lbl = ttk.Label(f, text="", style="Muted.TLabel", width=60)
         self.file_lbl.pack(anchor="w", pady=(4, 8))
         self.bar = ttk.Progressbar(f, mode="indeterminate")
         self.bar.pack(fill="x")
@@ -450,6 +465,7 @@ class QuickWindow(tk.Tk):
         self.btns.pack(fill="x", pady=(10, 0))
         threading.Thread(target=self._work, daemon=True).start()
         self.after(100, self._pump)
+        self.after(50, lambda: theme.title_bar(self, self.dark))
 
     def _work(self):
         files = engine.expand(self.items)
