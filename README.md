@@ -6,9 +6,9 @@ Removes metadata from videos, audio and images, including AI / C2PA "Content Cre
 
 - Makes a clean **copy** next to each original: `clip.mp4` → `clip_camo.mp4`. Your originals are never changed.
 - Video and audio are copied without re-encoding: no quality loss, and it's fast.
-- Windows 10 and 11 (64-bit). Everything it needs is included — no Python, ffmpeg or ExifTool install required.
+- Windows 10 and 11 (64-bit), and macOS 11 or newer (Apple Silicon and Intel). Everything it needs is included — no Python, ffmpeg or ExifTool install required.
 
-## Download & install
+## Download & install (Windows)
 
 1. Download **dl_remove_metadata-windows.zip** from the [latest release](../../releases/latest).
 2. Right-click the zip → **Extract All…** and put the `dl_remove_metadata` folder somewhere permanent, e.g. `C:\Users\<you>\Apps\dl_remove_metadata`.
@@ -17,6 +17,18 @@ Removes metadata from videos, audio and images, including AI / C2PA "Content Cre
 4. The app adds **Remove Metadata** and **Check for AI Tags** to Explorer's right-click menu (for your user only; no admin needed).
 
 If you move the folder later, just open the app once more and the right-click menu follows it.
+
+## Download & install (Mac)
+
+1. From the [latest release](../../releases/latest), download the file for your Mac (Apple menu → **About This Mac**):
+   - **dl_remove_metadata-mac-apple-silicon.dmg** — chip "Apple M1/M2/M3/M4…"
+   - **dl_remove_metadata-mac-intel.dmg** — processor "Intel"
+2. Double-click the `.dmg` and drag **dl_remove_metadata** onto **Applications**.
+3. Open it from Applications. macOS says it can't verify the developer: click **Done**.
+4. **Apple menu → System Settings → Privacy & Security**, scroll to **Security**, click **Open Anyway**, then **Open Anyway** again and enter your password. You only do this once.
+5. The app adds **Remove Metadata** and **Check for AI Tags** to Finder (right-click → **Quick Actions**). If they don't show, switch them on in **System Settings → General → Login Items & Extensions → Finder**.
+
+The `.dmg` also has **dl_remove_metadata (Web).command** for the browser version (right-click → **Open** the first time).
 
 ## Use
 

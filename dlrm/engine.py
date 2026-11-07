@@ -94,7 +94,7 @@ def tool_versions():
     if find_ffmpeg():
         out = run([_ffmpeg, "-hide_banner", "-version"]).stdout.decode("utf-8", "replace").split()
         if len(out) > 2:
-            fv = re.sub(r"-(essentials|full).*$", "", out[2])
+            fv = re.sub(r"-(essentials|full|https?:).*$", "", out[2])
     if find_exiftool():
         rc, out, _ = exiftool(["-ver"])
         ev = out.strip() or ev
