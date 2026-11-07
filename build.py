@@ -20,7 +20,7 @@ from dlrm import updater  # noqa: E402
 from dlrm.common import APP_NAME, RELEASE_ASSET  # noqa: E402
 
 TOOLS = ROOT / "tools"
-DIST = ROOT / "dist"
+DIST = ROOT / "dist" / "Windows"   # the Mac build goes in dist/MacOS
 ICON = ROOT / "assets" / "icon.ico"
 
 
