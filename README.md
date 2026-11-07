@@ -39,6 +39,14 @@ Switch to **Check for AI Tags** at the top of the window and drop files (or righ
 
 Double-click a row (or **Details…**) to see exactly which tags were found. Files with AI tags are ticked (☑) automatically; click the ✓ column to change that. **Remove Metadata from Selected** makes clean copies.
 
+### Browser version (no app window)
+
+Double-click **dl_remove_metadata (Web).cmd** in the program folder. A page opens in your web browser with the same two modes: drop files (or folders) on it, then click **Download** next to each clean copy, or **Download all (.zip)**.
+
+- It runs only on your own computer (`http://127.0.0.1`); files are never sent anywhere else. The page needs the program folder next to it, because it uses the bundled ffmpeg and ExifTool.
+- Clean copies go to your browser's Downloads folder, named `name_camo.ext`.
+- Close the browser tab when you're done; the background server stops by itself about a minute later.
+
 ## Updates
 
 Once a week, or when you click **Check for Updates**, the app updates ffmpeg, ExifTool and its list of AI tags (into `%LOCALAPPDATA%\dl_remove_metadata`; the program folder stays as it is). When a new version of dl_remove_metadata is released here, it shows **Update Now**: one click downloads it and restarts the app.

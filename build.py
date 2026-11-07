@@ -61,6 +61,7 @@ def pyinstaller():
     subprocess.check_call([sys.executable, "-m", "PyInstaller", "--noconfirm", "--clean", "--windowed",
                            "--name", APP_NAME, "--icon", str(ICON),
                            "--add-data", f"{ICON};assets",
+                           "--add-data", f"{ROOT / 'dlrm' / 'web_page.html'};dlrm",
                            "--collect-all", "tkinterdnd2",
                            "--distpath", str(DIST), "--workpath", str(ROOT / "build"),
                            "--specpath", str(ROOT / "build"), str(ROOT / "run.py")])
@@ -71,6 +72,10 @@ def assemble():
     shutil.copytree(TOOLS, out / "tools", dirs_exist_ok=True)
     (out / "assets").mkdir(exist_ok=True)
     shutil.copy2(ICON, out / "assets" / "icon.ico")
+    shutil.copy2(ICON.with_suffix(".png"), out / "assets" / "icon.png")
+    # Double-click launcher for the browser version (starts the local server, opens the page).
+    (out / f"{APP_NAME} (Web).cmd").write_text(
+        f'@echo off\r\nstart "" "%~dp0{APP_NAME}.exe" --web\r\n', encoding="ascii")
     for name in ("detect_rules.txt", "LICENSE", "THIRD_PARTY_NOTICES.md", "README.md"):
         shutil.copy2(ROOT / name, out / name)
     shutil.copytree(ROOT / "licenses", out / "licenses", dirs_exist_ok=True)

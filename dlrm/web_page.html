@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dl_remove_metadata</title>
+<link rel="icon" href="icon.png">
+<style>
+  :root {
+    --bg: #f5f6f8; --card: #ffffff; --text: #1d2330; --muted: #667085; --line: #e3e6eb;
+    --accent: #205cd6; --accent-soft: #e8effc; --red: #c62828; --red-soft: #fdecec;
+    --orange: #b45309; --orange-soft: #fef3e2; --green: #2e7d32; --green-soft: #e8f5e9;
+    --drop: #f0f4fc;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161b; --card: #1c1f26; --text: #e7e9ee; --muted: #9aa3b2; --line: #2c313b;
+      --accent: #6b9bff; --accent-soft: #1f2a44; --red: #ff6b6b; --red-soft: #3a1f22;
+      --orange: #f5a524; --orange-soft: #3a2c16; --green: #5cc46a; --green-soft: #1b3221;
+      --drop: #1a2030;
+    }
+  }
+  * { box-sizing: border-box; }
+  [hidden] { display: none !important; }
+  body { margin: 0; background: var(--bg); color: var(--text);
+         font: 14px/1.45 "Segoe UI", system-ui, -apple-system, sans-serif; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 16px 48px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 18px; }
+  header img { width: 36px; height: 36px; border-radius: 8px; }
+  header h1 { font-size: 20px; margin: 0; font-weight: 600; }
+  header .sub { color: var(--muted); font-size: 12.5px; }
+  .tabs { display: inline-flex; background: var(--card); border: 1px solid var(--line); border-radius: 10px; padding: 3px; }
+  .tabs button { border: 0; background: transparent; color: var(--muted); padding: 8px 16px; border-radius: 7px;
+                 font: inherit; font-weight: 600; cursor: pointer; }
+  .tabs button.on { background: var(--accent); color: #fff; }
+  .drop { margin: 16px 0; border: 2px dashed var(--line); border-radius: 14px; background: var(--drop);
+          padding: 34px 16px; text-align: center; cursor: pointer; transition: border-color .15s, background .15s; }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop strong { display: block; font-size: 16px; margin-bottom: 4px; }
+  .drop span { color: var(--muted); }
+  .bar { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .bar .grow { flex: 1; }
+  .btn { border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 8px;
+         padding: 7px 12px; font: inherit; cursor: pointer; text-decoration: none; display: inline-block; }
+  .btn:hover { border-color: var(--accent); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn:disabled { opacity: .5; cursor: default; }
+  .status { color: var(--muted); }
+  .list { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  .empty { padding: 28px; text-align: center; color: var(--muted); }
+  .row { display: grid; grid-template-columns: 28px minmax(0, 1fr) auto; gap: 10px; align-items: center;
+         padding: 10px 14px; border-top: 1px solid var(--line); }
+  .row:first-child { border-top: 0; }
+  .row .name { font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .info { color: var(--muted); font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; }
+  .row .acts { display: flex; gap: 6px; align-items: center; }
+  .badge { font-size: 12px; font-weight: 600; padding: 3px 8px; border-radius: 999px; white-space: nowrap; }
+  .b-AI, .b-FAIL { color: var(--red); background: var(--red-soft); }
+  .b-META { color: var(--orange); background: var(--orange-soft); }
+  .b-CLEAN, .b-OK { color: var(--green); background: var(--green-soft); }
+  .b-SKIP, .b-WAIT, .b-RUN { color: var(--muted); background: var(--bg); }
+  .prog { height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; margin-top: 5px; }
+  .prog i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  details.tags { grid-column: 2 / -1; font-size: 12.5px; }
+  details.tags summary { cursor: pointer; color: var(--accent); }
+  details.tags table { width: 100%; border-collapse: collapse; margin-top: 6px; table-layout: fixed; }
+  details.tags td { padding: 4px 6px; border-top: 1px solid var(--line); vertical-align: top; word-break: break-word; }
+  details.tags td:first-child { width: 34%; }
+  td.k-ai { color: var(--red); } td.k-info { color: var(--orange); }
+  code { font-family: Consolas, monospace; font-size: 12px; }
+  input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
+  footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
+  @media (max-width: 600px) {
+    .row { grid-template-columns: 24px minmax(0, 1fr); }
+    .row .acts { grid-column: 2; }
+  }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <img src="icon.png" alt="">
+    <div>
+      <h1>dl_remove_metadata</h1>
+      <div class="sub">Runs only on this computer. Files are never sent anywhere else.</div>
+    </div>
+  </header>
+
+  <div class="tabs" role="tablist">
+    <button id="tab-remove" class="on" data-mode="remove">Remove Metadata</button>
+    <button id="tab-check" data-mode="check">Check for AI Tags</button>
+  </div>
+
+  <div id="drop" class="drop" tabindex="0">
+    <strong id="drop-title">Drop videos, audio or images here</strong>
+    <span id="drop-sub">or click to choose files. You get clean copies to download; originals are never changed.</span>
+  </div>
+  <input id="picker" type="file" multiple hidden>
+
+  <div class="bar">
+    <span id="status" class="status grow"></span>
+    <button id="clean-sel" class="btn primary" hidden>Remove Metadata from Selected</button>
+    <button id="zip" class="btn primary" hidden>Download all (.zip)</button>
+    <button id="clear" class="btn">Clear list</button>
+  </div>
+
+  <div id="list" class="list"><div class="empty">No files yet.</div></div>
+
+  <footer id="foot"></footer>
+</div>
+
+<script>
+const TOKEN = new URLSearchParams(location.search).get("t") || "";
+const H = { "X-Token": TOKEN };
+const BADGE = { AI: "AI tags", META: "Other details", CLEAN: "Clean", OK: "Cleaned", SKIP: "Skipped",
+                FAIL: "Failed", WAIT: "Waiting", RUN: "Working…" };
+let mode = "remove";
+const rows = [];          // {id, name, file, el, status, tags, out, sel}
+const queue = [];
+let busy = false;
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const size = n => n > 1e9 ? (n/1e9).toFixed(1)+" GB" : n > 1e6 ? (n/1e6).toFixed(1)+" MB" : Math.max(1, Math.round(n/1e3))+" KB";
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll(".tabs button").forEach(b => b.classList.toggle("on", b.dataset.mode === m));
+  $("#drop-title").textContent = m === "check" ? "Drop files here to check them for AI tags" : "Drop videos, audio or images here";
+  $("#drop-sub").textContent = m === "check" ? "or click to choose files. Checking only reads files; nothing is changed."
+                                             : "or click to choose files. You get clean copies to download; originals are never changed.";
+}
+document.querySelectorAll(".tabs button").forEach(b => b.onclick = () => setMode(b.dataset.mode));
+
+const drop = $("#drop");
+drop.onclick = () => $("#picker").click();
+drop.onkeydown = e => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); $("#picker").click(); } };
+$("#picker").onchange = e => { add([...e.target.files]); e.target.value = ""; };
+["dragenter", "dragover"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); drop.classList.add("over"); }));
+["dragleave", "drop"].forEach(t => document.addEventListener(t, e => { e.preventDefault(); if (t === "drop" || e.target === drop) drop.classList.remove("over"); }));
+document.addEventListener("drop", async e => {
+  const items = [...(e.dataTransfer.items || [])].map(i => i.webkitGetAsEntry && i.webkitGetAsEntry()).filter(Boolean);
+  if (items.length) add(await walk(items)); else add([...e.dataTransfer.files]);
+});
+
+// Folders dropped in: collect the files inside them.
+async function walk(entries) {
+  const out = [];
+  async function visit(en) {
+    if (en.isFile) { out.push(await new Promise((res, rej) => en.file(res, rej))); return; }
+    if (en.isDirectory) {
+      const r = en.createReader();
+      let batch;
+      do { batch = await new Promise((res, rej) => r.readEntries(res, rej)); for (const c of batch) await visit(c); }
+      while (batch.length);
+    }
+  }
+  for (const en of entries) await visit(en);
+  return out.filter(f => !f.name.startsWith("."));
+}
+
+function add(files, forceMode) {
+  if (!files.length) return;
+  if ($(".empty")) $("#list").innerHTML = "";
+  for (const f of files) {
+    const r = { name: f.name, file: f, status: "WAIT", sel: false, mode: forceMode || mode };
+    r.el = document.createElement("div");
+    r.el.className = "row";
+    $("#list").appendChild(r.el);
+    rows.push(r); queue.push(r); render(r);
+  }
+  pump();
+}
+
+function render(r, pct) {
+  const isCheck = r.mode === "check";
+  let info = "";
+  if (r.status === "RUN" && pct !== undefined) info = pct < 100 ? `Loading ${pct}%` : "Processing…";
+  else if (r.status === "OK") info = `${esc(r.out)} · ${size(r.outSize)}`;
+  else if (r.reason) info = esc(r.reason);
+  else if (isCheck && r.tags) {
+    const ai = r.tags.filter(t => t.kind === "ai");
+    info = esc([...new Set((ai.length ? ai : r.tags).map(t => t.label))].join(", ")) || "No AI tags or personal details found";
+  } else info = size(r.file.size);
+  const canSel = isCheck && ["AI", "META", "CLEAN"].includes(r.status);
+  r.el.innerHTML = `
+    <div>${canSel ? `<input type="checkbox" ${r.sel ? "checked" : ""} title="Select to clean">` : ""}</div>
+    <div style="min-width:0">
+      <div class="name" title="${esc(r.name)}">${esc(r.name)}</div>
+      <div class="info">${info}</div>
+      ${r.status === "RUN" ? `<div class="prog"><i style="width:${pct || 0}%"></i></div>` : ""}
+    </div>
+    <div class="acts">
+      <span class="badge b-${r.status}">${BADGE[r.status] || r.status}</span>
+      ${r.status === "OK" ? `<a class="btn" href="api/download/${r.id}?t=${encodeURIComponent(TOKEN)}">Download</a>` : ""}
+    </div>
+    ${isCheck && r.tags && r.tags.length ? `<details class="tags"><summary>Details (${r.tags.length})</summary><table>${
+      r.tags.map(t => `<tr><td class="k-${t.kind}">${esc(t.label)}</td><td><code>${esc(t.tag)}</code> = ${esc(t.value)}</td></tr>`).join("")
+    }</table></details>` : ""}`;
+  const cb = r.el.querySelector("input[type=checkbox]");
+  if (cb) cb.onchange = () => { r.sel = cb.checked; refresh(); };
+}
+
+function upload(r) {
+  return new Promise((res, rej) => {
+    const x = new XMLHttpRequest();
+    x.open("POST", "api/upload?name=" + encodeURIComponent(r.name));
+    x.setRequestHeader("X-Token", TOKEN);
+    x.upload.onprogress = e => { if (e.lengthComputable) render(r, Math.round(e.loaded / e.total * 100)); };
+    x.onload = () => x.status === 200 ? res(JSON.parse(x.responseText)) : rej(new Error(x.responseText || "upload failed"));
+    x.onerror = () => rej(new Error("The local server stopped. Open the dl_remove_metadata (Web) launcher again."));
+    x.send(r.file);
+  });
+}
+
+async function api(path, body) {
+  const resp = await fetch(path, { method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: JSON.stringify(body) });
+  if (!resp.ok) throw new Error((await resp.text()) || resp.statusText);
+  return resp.json();
+}
+
+async function pump() {
+  if (busy) return;
+  busy = true;
+  while (queue.length) {
+    const r = queue.shift();
+    r.status = "RUN"; render(r, 0); refresh();
+    try {
+      if (!r.id) { const u = await upload(r); r.id = u.id; }
+      render(r, 100);
+      const res = await api("api/process", { id: r.id, mode: r.mode });
+      r.status = res.status; r.reason = res.reason || "";
+      if (r.mode === "check") { r.tags = res.tags || []; r.sel = res.status === "AI"; }
+      else { r.out = res.output; r.outSize = res.size; }
+    } catch (e) { r.status = "FAIL"; r.reason = e.message; }
+    render(r); refresh();
+  }
+  busy = false; refresh();
+}
+
+function refresh() {
+  const done = rows.filter(r => !["WAIT", "RUN"].includes(r.status));
+  const ok = rows.filter(r => r.status === "OK");
+  const checked = rows.filter(r => r.mode === "check" && done.includes(r));
+  const sel = rows.filter(r => r.sel && r.mode === "check");
+  $("#zip").hidden = ok.length < 2;
+  $("#zip").textContent = `Download all ${ok.length} (.zip)`;
+  $("#clean-sel").hidden = !checked.length;
+  $("#clean-sel").disabled = !sel.length;
+  $("#clean-sel").textContent = sel.length ? `Remove Metadata from ${sel.length} selected` : "Remove Metadata from Selected";
+  const left = rows.length - done.length;
+  if (left) $("#status").textContent = `${left} left…`;
+  else if (!rows.length) $("#status").textContent = "";
+  else {
+    const ai = checked.filter(r => r.status === "AI").length, fail = rows.filter(r => r.status === "FAIL").length;
+    $("#status").textContent = [ok.length ? `${ok.length} cleaned` : "", checked.length ? `${checked.length} checked · ${ai} with AI tags` : "",
+                                fail ? `${fail} failed` : ""].filter(Boolean).join(" · ");
+  }
+}
+
+$("#zip").onclick = () => {
+  const ids = rows.filter(r => r.status === "OK").map(r => r.id).join(",");
+  location.href = `api/zip?ids=${ids}&t=${encodeURIComponent(TOKEN)}`;
+};
+
+$("#clean-sel").onclick = () => {
+  const picked = rows.filter(r => r.sel && r.mode === "check");
+  setMode("remove");
+  for (const r of picked) {
+    const n = { name: r.name, file: r.file, id: r.id, status: "WAIT", sel: false, mode: "remove" };
+    r.sel = false; render(r);
+    n.el = document.createElement("div"); n.el.className = "row";
+    $("#list").appendChild(n.el); rows.push(n); queue.push(n); render(n);
+  }
+  pump();
+};
+
+$("#clear").onclick = () => {
+  const ids = rows.filter(r => r.id && !queue.includes(r)).map(r => r.id);
+  if (ids.length) api("api/forget", { ids }).catch(() => {});
+  queue.length = 0; rows.length = 0;
+  $("#list").innerHTML = '<div class="empty">No files yet.</div>';
+  refresh();
+};
+
+// Keep the local server alive while this page is open.
+setInterval(() => fetch("api/heartbeat", { headers: H }).catch(() => {}), 15000);
+fetch("api/info", { headers: H }).then(r => r.json())
+  .then(i => $("#foot").textContent = `${i.app} ${i.version} · ${i.tools}`)
+  .catch(() => $("#foot").textContent = "Couldn't reach the local server. Open the dl_remove_metadata (Web) launcher again.");
+</script>
+</body>
+</html>

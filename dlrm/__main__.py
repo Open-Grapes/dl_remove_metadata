@@ -3,7 +3,8 @@
   dl_remove_metadata.exe                        open the window
   dl_remove_metadata.exe FILE|FOLDER ...        open the window and clean these (drag onto the .exe)
   dl_remove_metadata.exe --queue remove|check PATH   used by the Explorer right-click menu
-  dl_remove_metadata.exe --auto-update          weekly background update check (silent)
+  dl_remove_metadata.exe --web                  local web version: opens a page in the browser
+  dl_remove_metadata.exe --auto-update         weekly background update check (silent)
   dl_remove_metadata.exe --install-menu | --remove-menu
 
 Command-line mode (prints results; run with python -m dlrm, or the console build):
@@ -57,6 +58,9 @@ def main(argv=None):
     args = list(sys.argv[1:] if argv is None else argv)
     if args[:1] == ["--cli"]:
         return cli(args[1:])
+    if args[:1] == ["--web"]:
+        from . import web
+        return web.serve(open_browser="--no-browser" not in args)
     if args[:1] == ["--auto-update"]:
         from . import updater
         updater.run_update(auto=True)
