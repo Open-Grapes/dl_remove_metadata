@@ -48,6 +48,11 @@ def apply(root, dark):
         style.configure("Toolbutton", background=bg, padding=(10, 4), relief="flat")
         style.map("Toolbutton", background=[("selected", p["accent"]), ("active", p["hover"])],
                   foreground=[("selected", "#ffffff")])
+        style.configure("TRadiobutton", background=bg, indicatorbackground=field, indicatorforeground=text,
+                        upperbordercolor=line, lowerbordercolor=line)
+        style.map("TRadiobutton", background=[("active", bg)],
+                  indicatorbackground=[("selected", p["accent"]), ("active", p["hover"])],
+                  indicatorforeground=[("selected", "#ffffff")])
         style.configure("TCheckbutton", background=bg, indicatorbackground=field, indicatorforeground=text,
                         upperbordercolor=line, lowerbordercolor=line)
         style.map("TCheckbutton", background=[("active", bg)],

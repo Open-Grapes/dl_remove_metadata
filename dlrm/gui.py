@@ -13,6 +13,8 @@ from .common import (APP_DIR, APP_NAME, APP_VERSION, FILE_MANAGER, IS_MAC, IS_WI
                      save_settings)
 from .theme import MONO, UI
 
+TRASH = "Trash" if IS_MAC else "Recycle Bin"
+
 try:
     from tkinterdnd2 import DND_FILES, TkinterDnD
     BaseTk = TkinterDnD.Tk
@@ -116,6 +118,15 @@ class App(BaseTk):
         ttk.Button(row, text="Save to…", command=self.choose_outdir).pack(side="right", padx=6)
         self.outdir_lbl = ttk.Label(row, style="Muted.TLabel")
         self.outdir_lbl.pack(side="right")
+
+        orow = ttk.Frame(self, padding=(12, 8, 12, 0))
+        orow.pack(fill="x")
+        ttk.Label(orow, text="Originals:").pack(side="left", padx=(0, 8))
+        self.remove_var = tk.BooleanVar(value=bool(self.settings.get("remove_originals")))
+        ttk.Radiobutton(orow, text="Keep originals", value=False, variable=self.remove_var,
+                        command=self.originals_changed).pack(side="left", padx=(0, 12))
+        ttk.Radiobutton(orow, text=f"Remove originals (move to the {TRASH})", value=True,
+                        variable=self.remove_var, command=self.originals_changed).pack(side="left")
 
         mid = ttk.Frame(self, padding=(12, 8))
         mid.pack(fill="both", expand=True)
@@ -242,6 +253,19 @@ class App(BaseTk):
         except OSError as e:
             messagebox.showerror(APP_NAME, f"Couldn't change the right-click menu:\n{e}")
 
+    # ------------------------------------------------------------ keep / remove originals
+    def originals_changed(self):
+        remove = self.remove_var.get()
+        if remove == bool(self.settings.get("remove_originals")):
+            return
+        if remove and not messagebox.askyesno(
+                APP_NAME, f"After each clean _camo copy is made, the original file will be moved to the {TRASH}."
+                          "\n\nIf cleaning a file fails, its original is kept.\n\nTurn this on?", parent=self):
+            self.remove_var.set(False)
+            return
+        self.settings["remove_originals"] = remove
+        save_settings(self.settings)          # remembered on this computer
+
     # ------------------------------------------------------------ output folder
     def _refresh_outdir(self):
         d = self.settings.get("outdir")
@@ -303,13 +327,14 @@ class App(BaseTk):
             return
         self.busy = True
         outdir = self.outdir
+        remove = self.remove_var.get()
 
         def work():
             while self.jobs:
                 mode, iid, f = self.jobs.pop(0)
                 self.events.put(("running", iid))
                 try:
-                    res = engine.check_one(f) if mode == "check" else engine.process_one(f, outdir)
+                    res = engine.check_one(f) if mode == "check" else engine.process_one(f, outdir, remove)
                 except Exception as e:
                     res = engine.Result("FAIL", f, reason=str(e))
                 self.events.put(("result", (mode, iid, res)))
@@ -372,6 +397,10 @@ class App(BaseTk):
                            tags=(res.status,))
         else:
             info = Path(res.output).name if res.status == "OK" else res.reason
+            if res.status == "OK" and res.removed:
+                info += f"  ·  original moved to the {TRASH}"
+            elif res.status == "OK" and res.reason:
+                info += f"  ·  {res.reason}"
             self.tree.item(iid, values=("", BADGE[res.status], Path(res.file).name, info,
                                         str(Path(res.file).parent)), tags=(res.status,))
 
@@ -387,7 +416,9 @@ class App(BaseTk):
         else:
             ok = sum(1 for r in results if r.status == "OK")
             fail = sum(1 for r in results if r.status == "FAIL")
-            self.status.configure(text=f"{ok} cleaned" + (f" · {fail} failed (see Result column)" if fail else ""))
+            gone = sum(1 for r in results if getattr(r, "removed", False))
+            self.status.configure(text=f"{ok} cleaned" + (f" · {gone} originals moved to the {TRASH}" if gone else "")
+                                  + (f" · {fail} failed (see Result column)" if fail else ""))
 
     # ------------------------------------------------------------ list actions
     def _tree_click(self, e):
@@ -478,7 +509,8 @@ class QuickWindow(tk.Tk):
         set_icon(self)
         self.dark = load_settings().get("theme") == "dark"
         theme.apply(self, self.dark)
-        self.items, self.outdir = items, load_settings().get("outdir")
+        st = load_settings()
+        self.items, self.outdir, self.remove = items, st.get("outdir"), bool(st.get("remove_originals"))
         if self.outdir and not Path(self.outdir).is_dir():
             self.outdir = None
         self.events = queue.Queue()
@@ -503,7 +535,7 @@ class QuickWindow(tk.Tk):
         results = []
         for i, f in enumerate(files, 1):
             self.events.put(("file", (i, len(files), f)))
-            results.append(engine.process_one(f, self.outdir))
+            results.append(engine.process_one(f, self.outdir, self.remove))
         self.events.put(("done", results))
 
     def _pump(self):
@@ -540,8 +572,10 @@ class QuickWindow(tk.Tk):
         else:
             word = "file" if len(ok) == 1 else "files"
             self.title_lbl.configure(text=f"Metadata removed from {len(ok)} {word}.")
-            self.file_lbl.configure(text=f"Saved as {Path(ok[-1].output).name}" if len(ok) == 1 else
-                                    f"Clean copies end in _camo")
+            gone = sum(1 for r in ok if r.removed)
+            self.file_lbl.configure(text=(f"Saved as {Path(ok[-1].output).name}" if len(ok) == 1 else
+                                          "Clean copies end in _camo")
+                                    + (f" · original{'s' if gone > 1 else ''} moved to the {TRASH}" if gone else ""))
             sound(True)
             self.after(8000, self.destroy)
         if ok:

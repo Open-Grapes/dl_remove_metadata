@@ -39,6 +39,8 @@ The `.dmg` also has **dl_remove_metadata (Web).command** for the browser version
 
 **Save to…** puts clean copies in another folder. **Reset** goes back to saving next to the originals.
 
+**Originals:** choose **Keep originals** (default) or **Remove originals**. With Remove, each original is moved to the Recycle Bin (Trash on Mac) once its clean `_camo` copy has been made, so you're left with only the clean copy; if cleaning a file fails, its original is kept. The right-click action follows the same choice, and it's remembered on each computer.
+
 ### Check for AI tags
 
 Switch to **Check for AI Tags** at the top of the window and drop files (or right-click → **Check for AI Tags**). Checking only reads files; nothing is changed.
