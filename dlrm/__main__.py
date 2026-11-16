@@ -12,7 +12,8 @@ Command-line mode (prints results; run with python -m dlrm, or the console build
   --cli [--outdir DIR] FILE|FOLDER ...   clean items, one status line each (OK / SKIP / FAIL)
   --cli --check FILE|FOLDER ...          report metadata / AI tags only (never changes files)
   --cli --versions                       print tool versions
-  --cli --update                         check for updates now
+  --cli --update                         check for updates now (tools and AI tag list)
+  --cli --update-app                     install a newer release of the app itself
 """
 
 import sys
@@ -37,6 +38,14 @@ def cli(args):
     if args[:1] == ["--update"]:
         _print(updater.run_update())
         return 0
+    if args[:1] == ["--update-app"]:     # install a newer release of the app itself, if there is one
+        v = updater.app_release_info().get("latest", "")
+        if not v or not updater.newer(v, updater.APP_VERSION):
+            _print("Already up to date.")
+            return 0
+        err = updater.install_app_update(v)
+        _print(err or f"Installing {v}; the app restarts when done.")
+        return 1 if err else 0
     if args[:1] == ["--check"]:
         for f in engine.expand(args[1:], include_cleaned=True):
             r = engine.check_one(f)

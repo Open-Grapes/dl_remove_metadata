@@ -66,7 +66,7 @@ Double-click **dl_remove_metadata (Web).cmd** in the program folder. A page open
 
 ## Updates
 
-Once a week, or when you click **Check for Updates**, the app updates ffmpeg, ExifTool and its list of AI tags (into `%LOCALAPPDATA%\dl_remove_metadata`; the program folder stays as it is). When a new version of dl_remove_metadata is released here, it shows **Update Now**: one click downloads it and restarts the app.
+**Check for Updates** opens a window showing this version and the latest on GitHub with its release notes, plus ffmpeg, ExifTool and the AI tag list with their status. **Update all** installs everything new in one click, **Check again** re-checks, **Release page** opens the release on GitHub. Once a week the app also updates ffmpeg, ExifTool and its list of AI tags by itself (into `%LOCALAPPDATA%\dl_remove_metadata`; the program folder stays as it is). When a new version of dl_remove_metadata is released here, it shows **Update Now**: one click downloads it and restarts the app.
 
 To remove the right-click menu, untick **Right-click menu** at the bottom of the window. To uninstall, untick it, then delete the program folder and `%LOCALAPPDATA%\dl_remove_metadata`.
 

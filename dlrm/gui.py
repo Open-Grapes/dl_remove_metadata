@@ -226,23 +226,12 @@ class App(BaseTk):
             self.update_now_btn.pack_forget()
 
     def check_updates(self):
-        self.status.configure(text="Checking for updates…")
-
-        def work():
-            msg = updater.run_update()
-            engine.reset_tool_cache()
-            self.events.put(("updated", msg))
-        threading.Thread(target=work, daemon=True).start()
+        """Open the Check for updates window (this version vs GitHub, release notes, tools, Update all)."""
+        from .update_dialog import UpdateDialog
+        UpdateDialog.show(self)
 
     def update_now(self):
-        v = updater.update_available()
-        if not v or self.busy:
-            return
-        self.status.configure(text=f"Downloading {APP_NAME} {v}…")
-
-        def work():
-            self.events.put(("app_update", updater.install_app_update(v)))
-        threading.Thread(target=work, daemon=True).start()
+        self.check_updates()
 
     def toggle_menu(self):
         try:
