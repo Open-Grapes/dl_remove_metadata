@@ -300,33 +300,9 @@ def process_one(f, outdir=None, remove_original=False):
 
 
 def move_to_trash(path):
-    """Move a file to the Recycle Bin (Windows) or Trash (macOS). Returns '' on success, else the reason."""
-    path = str(Path(path).resolve())
-    if IS_WIN:
-        import ctypes
-        from ctypes import wintypes
-
-        class SHFILEOPSTRUCTW(ctypes.Structure):
-            _fields_ = [("hwnd", wintypes.HWND), ("wFunc", wintypes.UINT), ("pFrom", wintypes.LPCWSTR),
-                        ("pTo", wintypes.LPCWSTR), ("fFlags", ctypes.c_ushort),
-                        ("fAnyOperationsAborted", wintypes.BOOL), ("hNameMappings", ctypes.c_void_p),
-                        ("lpszProgressTitle", wintypes.LPCWSTR)]
-        FO_DELETE, FOF_SILENT, FOF_NOCONFIRMATION, FOF_ALLOWUNDO, FOF_NOERRORUI = 3, 0x4, 0x10, 0x40, 0x400
-        op = SHFILEOPSTRUCTW(None, FO_DELETE, path + "\0", None,
-                             FOF_ALLOWUNDO | FOF_NOCONFIRMATION | FOF_SILENT | FOF_NOERRORUI, False, None, None)
-        rc = ctypes.windll.shell32.SHFileOperationW(ctypes.byref(op))
-        if rc == 0 and not op.fAnyOperationsAborted and not os.path.exists(path):
-            return ""
-        return f"couldn't move it to the Recycle Bin (error {rc})"
-    if IS_MAC:
-        p = run(["/usr/bin/osascript", "-e", "on run argv",
-                 "-e", 'tell application "Finder" to delete (POSIX file (item 1 of argv) as alias)',
-                 "-e", "end run", path], timeout=60)
-        if p.returncode == 0 and not os.path.exists(path):
-            return ""
-        msg = p.stderr.decode("utf-8", "replace").strip().splitlines()
-        return "couldn't move it to the Trash" + (f" ({msg[-1]})" if msg else "")
-    return "moving to the trash isn't supported on this system"
+    """Move a file to the Recycle Bin / Trash (recorded so it can be restored). '' on success, else why not."""
+    from .trash import move_to_trash as _move
+    return _move(path)
 
 
 # ---------------------------------------------------------------- checking (read-only)

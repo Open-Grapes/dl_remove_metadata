@@ -8,7 +8,7 @@ import tkinter as tk
 from pathlib import Path
 from tkinter import filedialog, messagebox, ttk
 
-from . import engine, shell, theme, updater
+from . import engine, shell, theme, trash, updater
 from .common import (APP_DIR, APP_NAME, APP_VERSION, FILE_MANAGER, IS_MAC, IS_WIN, LOG, load_settings,
                      save_settings)
 from .theme import MONO, UI
@@ -127,6 +127,9 @@ class App(BaseTk):
                         command=self.originals_changed).pack(side="left", padx=(0, 12))
         ttk.Radiobutton(orow, text=f"Remove originals (move to the {TRASH})", value=True,
                         variable=self.remove_var, command=self.originals_changed).pack(side="left")
+        self.restore_btn = ttk.Button(orow, text="Restore originals", command=self.restore_originals)
+        self.restore_btn.pack(side="left", padx=(10, 0))
+        self._restore_state()
 
         mid = ttk.Frame(self, padding=(12, 8))
         mid.pack(fill="both", expand=True)
@@ -265,6 +268,39 @@ class App(BaseTk):
             return
         self.settings["remove_originals"] = remove
         save_settings(self.settings)          # remembered on this computer
+        self._restore_state()
+
+    def _restore_state(self):
+        """Restore originals is only available while Remove originals is selected."""
+        self.restore_btn.state(["!disabled"] if self.remove_var.get() else ["disabled"])
+
+    def restore_originals(self):
+        """Bring the originals this app moved to the Recycle Bin / Trash back to their folders."""
+        if self.busy:
+            messagebox.showinfo(APP_NAME, "Wait until the files in the list are finished.", parent=self)
+            return
+        nl = chr(10)
+        items = trash.pending()
+        if not items:
+            messagebox.showinfo(APP_NAME, f"There are no removed originals in the {TRASH} to bring back."
+                                          + nl * 2 + f"(Only originals this app moved, and only while they're "
+                                          f"still in the {TRASH}.)", parent=self)
+            return
+        names = nl.join("  " + Path(r["original"]).name for r in items[:8])
+        more = nl + f"  …and {len(items) - 8} more" if len(items) > 8 else ""
+        s = "s" if len(items) != 1 else ""
+        if not messagebox.askyesno(APP_NAME, f"Bring back {len(items)} original{s} from the {TRASH} to their "
+                                             f"folders?" + nl * 2 + names + more + nl * 2
+                                             + "The clean _camo copies stay where they are.", parent=self):
+            return
+        restored, problems = trash.restore_all()
+        n = len(restored)
+        msg = f"{n} original{'s' if n != 1 else ''} put back in {'their folders' if n != 1 else 'its folder'}."
+        if problems:
+            msg += nl * 2 + f"{len(problems)} couldn't be put back:" + nl + nl.join(
+                f"  {Path(p).name}: {why}" for p, why in problems[:8])
+        self.status.configure(text=f"{n} original{'s' if n != 1 else ''} restored")
+        (messagebox.showwarning if problems else messagebox.showinfo)(APP_NAME, msg, parent=self)
 
     # ------------------------------------------------------------ output folder
     def _refresh_outdir(self):

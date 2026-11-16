@@ -41,6 +41,9 @@ The `.dmg` also has **dl_remove_metadata (Web).command** for the browser version
 
 **Originals:** choose **Keep originals** (default) or **Remove originals**. With Remove, each original is moved to the Recycle Bin (Trash on Mac) once its clean `_camo` copy has been made, so you're left with only the clean copy; if cleaning a file fails, its original is kept. The right-click action follows the same choice, and it's remembered on each computer.
 
+- Drives without a Recycle Bin / Trash (network drives, USB sticks) would delete files permanently, so originals there are always kept.
+- **Restore originals** (next to the option, available while Remove is selected) brings back every original this app moved to the Recycle Bin / Trash into its original folder. The `_camo` copies stay. Originals already emptied from the bin can't be brought back, and a file is never put back over one with the same name.
+
 ### Check for AI tags
 
 Switch to **Check for AI Tags** at the top of the window and drop files (or right-click → **Check for AI Tags**). Checking only reads files; nothing is changed.
