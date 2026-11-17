@@ -252,7 +252,7 @@ def app_release_info():
         rel = json.loads(github_api(f"repos/{GITHUB_REPO}/releases/latest"))
         info.update(latest=re.sub(r"^v", "", rel.get("tag_name", "")), date=(rel.get("published_at") or "")[:10],
                     notes=(rel.get("body") or "").strip(), url=rel.get("html_url") or info["url"],
-                    via="checked with this computer's GitHub login (private repo)" if tok else "checked on GitHub")
+                    via="checked with this computer's GitHub login" if tok else "checked on GitHub")
     except Exception as e:
         latest = latest_app_version()      # public repo without a login
         if latest:
