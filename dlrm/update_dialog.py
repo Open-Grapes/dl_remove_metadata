@@ -68,7 +68,7 @@ class UpdateDialog(tk.Toplevel):
         self.notes.pack(side="left", fill="both", expand=True)
         sb.pack(side="right", fill="y")
 
-        ttk.Label(box, text="Tools", font=(UI, 12 + _S, "bold")).pack(anchor="w")
+        ttk.Label(box, text="Updates", font=(UI, 12 + _S, "bold")).pack(anchor="w")
         self.tools_frame = ttk.Frame(box)
         self.tools_frame.pack(fill="x", pady=(4, 8))
 
@@ -113,6 +113,8 @@ class UpdateDialog(tk.Toplevel):
             b.state(["disabled"] if busy else ["!disabled"])
         if busy:
             self.update_btn.state(["disabled"])
+            for b in getattr(self, "row_btns", []):
+                b.state(["disabled"])
             self.bar.configure(mode="indeterminate")
             self.bar.start(12)
         else:
@@ -166,8 +168,12 @@ class UpdateDialog(tk.Toplevel):
 
         for w in self.tools_frame.winfo_children():
             w.destroy()
-        for row, t in enumerate(st["tools"]):
-            ttk.Label(self.tools_frame, text=t["name"]).grid(row=row, column=0, sticky="w", padx=(0, 24), pady=1)
+        self.row_btns = []
+        rows = [{"key": "app", "name": f"{APP_NAME} (this app, from GitHub)", "current": APP_VERSION,
+                 "latest": a["latest"], "update": a["update"], "error": "couldn't check" if a["error"] else ""}]
+        rows += st["tools"]
+        for row, t in enumerate(rows):
+            ttk.Label(self.tools_frame, text=t["name"]).grid(row=row, column=0, sticky="w", padx=(0, 24), pady=2)
             ttk.Label(self.tools_frame, text=t["current"], style="Muted.TLabel").grid(row=row, column=1, sticky="w",
                                                                                       padx=(0, 24))
             if t["error"]:
@@ -178,7 +184,14 @@ class UpdateDialog(tk.Toplevel):
                 text, color = "up to date ✓", green
             else:
                 text, color = "not checked", p["muted"]
-            ttk.Label(self.tools_frame, text=text, foreground=color).grid(row=row, column=2, sticky="w")
+            ttk.Label(self.tools_frame, text=text, foreground=color).grid(row=row, column=2, sticky="w",
+                                                                         padx=(0, 16))
+            b = ttk.Button(self.tools_frame, text="Update", width=8,
+                           command=lambda k=t["key"]: self.update_items([k]))
+            b.grid(row=row, column=3, sticky="e")
+            b.state(["!disabled"] if t["update"] else ["disabled"])
+            self.row_btns.append(b)
+        self.tools_frame.columnconfigure(2, weight=1)
 
         n_tools = sum(1 for t in st["tools"] if t["update"])
         n = n_tools + (1 if a["update"] else 0)
@@ -189,7 +202,8 @@ class UpdateDialog(tk.Toplevel):
         else:
             parts = ([f"{APP_NAME} {a['latest']}"] if a["update"] else []) + \
                     [t["name"] for t in st["tools"] if t["update"]]
-            msg = f"{n} update{'s' if n != 1 else ''} available: {', '.join(parts)}. Click Update all."
+            msg = (f"{n} update{'s' if n != 1 else ''} available: {', '.join(parts)}. "
+                   f"Click Update all, or Update next to just one.")
         self._set_busy(False, msg)
         self.update_btn.state(["!disabled"] if n else ["disabled"])
         self.page_btn.state(["!disabled"] if a.get("url") else ["disabled"])
@@ -197,23 +211,33 @@ class UpdateDialog(tk.Toplevel):
     # ------------------------------------------------------------ updating
     def update_all(self):
         st = self.status
-        if self.busy or not st:
+        if not st:
             return
-        app_update = st["app"]["update"]
+        keys = (["app"] if st["app"]["update"] else []) + [t["key"] for t in st["tools"] if t["update"]]
+        self.update_items(keys)
+
+    def update_items(self, keys):
+        """Update the chosen components ("app", "ffmpeg", "exiftool", "rules"). The app goes last: it restarts."""
+        st = self.status
+        if self.busy or not st or not keys:
+            return
+        app_update = "app" in keys and st["app"]["update"]
         if app_update and self.app.busy:
-            messagebox.showinfo(APP_NAME, "Wait until the files in the main window are finished, then click "
-                                          "Update all again.", parent=self)
+            messagebox.showinfo(APP_NAME, "Wait until the files in the main window are finished, then try "
+                                          "again.", parent=self)
             return
+        tool_keys = [k for k in keys if k != "app"]
         self._set_busy(True, "Updating…")
 
         def work():
-            lines = updater.install_tools(st, progress=lambda m: self._ui(lambda: self.summary.configure(text=m)))
+            lines = updater.install_tools(st, progress=lambda m: self._ui(lambda: self.summary.configure(text=m)),
+                                          only=tool_keys) if tool_keys else []
             engine.reset_tool_cache()
             err = None
             if app_update:
                 v = st["app"]["latest"]
                 self._ui(lambda: self.summary.configure(text=f"Downloading {APP_NAME} {v}…"))
-                err = updater.install_app_update(st["app"]["latest"])
+                err = updater.install_app_update(v)
             self._ui(self._updated, lines, app_update, err)
         threading.Thread(target=work, daemon=True).start()
 

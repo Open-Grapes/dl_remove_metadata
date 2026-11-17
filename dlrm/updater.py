@@ -332,12 +332,14 @@ def check_all():
     return {"online": online, "app": app, "tools": tools}
 
 
-def install_tools(status, progress=None, force_ffmpeg=False):
-    """Install every tool marked for update in a check_all() result. Returns summary lines."""
+def install_tools(status, progress=None, force_ffmpeg=False, only=None):
+    """Install the tools marked for update in a check_all() result (only: just these keys). Returns summary lines."""
     from . import engine
     say = progress or (lambda msg: None)
     lines = []
     for t in status["tools"]:
+        if only is not None and t["key"] not in only:
+            continue
         if not (t["update"] or (force_ffmpeg and t["key"] == "ffmpeg" and t["latest"])):
             continue
         say(f"Updating {t['name']} to {t['latest']}…")

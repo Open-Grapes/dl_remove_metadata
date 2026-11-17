@@ -8,9 +8,9 @@ import sys
 from pathlib import Path
 
 APP_NAME = "dl_remove_metadata"
-APP_VERSION = "1.0.0"
+APP_VERSION = "1.1.0"
 
-# GitHub repository this Windows port is published from (tag "v" + version,
+# GitHub repository this app is published from (tag "v" + version,
 # with dl_remove_metadata-windows.zip attached). Used for "Update Now".
 GITHUB_REPO = "Open-Grapes/dl_remove_metadata"
 RELEASE_ASSET = "dl_remove_metadata-windows.zip"
