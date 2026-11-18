@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "dl_remove_metadata"
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.1"
 
 # GitHub repository this app is published from (tag "v" + version,
 # with dl_remove_metadata-windows.zip attached). Used for "Update Now".
@@ -88,5 +88,18 @@ def save_settings(data):
     ensure_dirs()
     try:
         (SUP / "settings.json").write_text(json.dumps(data, indent=2), encoding="utf-8")
+    except OSError:
+        pass
+
+
+def open_path(path):
+    """Open a file or folder with the system (Explorer / Finder / default app)."""
+    try:
+        if IS_MAC:
+            subprocess.Popen(["open", str(path)])
+        elif IS_WIN:
+            os.startfile(str(path))
+        else:
+            subprocess.Popen(["xdg-open", str(path)])
     except OSError:
         pass

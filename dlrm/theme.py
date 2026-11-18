@@ -73,6 +73,13 @@ def apply(root, dark):
         style.theme_use(next(t for t in ("vista", "aqua", "winnative", "clam") if t in names))
     style.configure("Drop.TLabel", font=(UI, 13 + _S), foreground=p["muted"], anchor="center")
     style.configure("Muted.TLabel", foreground=p["muted"])
+    style.configure("Warn.TLabel", foreground=p["tags"]["META"])
+    if dark:
+        style.configure("Accent.TButton", background=p["accent"], foreground="#ffffff", bordercolor=p["accent"])
+        style.map("Accent.TButton", background=[("pressed", "#2563eb"), ("active", "#4f8ff7"),
+                                                ("disabled", p["panel"])])
+    else:
+        style.configure("Accent.TButton", font=(UI, 9 + _S, "bold"))
     style.configure("Small.TLabel", foreground=p["faint"], font=(UI, 8 + _S))
     style.configure("Title.TLabel", font=(UI, 11 + _S, "bold"))
     style.configure("Treeview", rowheight=26)

@@ -64,6 +64,16 @@ Double-click **dl_remove_metadata (Web).cmd** in the program folder. A page open
 - Clean copies go to your browser's Downloads folder, named `name_camo.ext`.
 - Close the browser tab when you're done; the background server stops by itself about a minute later.
 
+### Share via Wi-Fi (phones and other computers)
+
+Click **Share via Wi-Fi** at the top of the window. It shows a QR code and an address like `http://192.168.0.20` (and `http://dl-remove-metadata.local` where the network allows it). Phones, tablets and laptops on the same Wi-Fi scan the code or open the address, drop photos, videos or audio on the page, choose **Remove Metadata** or **Check for AI Tags**, and download the clean copies. This computer does the work; keep it on with the app open.
+
+- There's no password: anyone on your Wi-Fi who knows the address can use it while sharing is on. **Turn off** in the same window ends it; open pages show "Wi-Fi sharing has ended".
+- Each device only sees and downloads its own files.
+- Uploads are kept on this computer, one folder each, until you delete them. A reminder bar shows while any are stored.
+- **Admin…** shows the stored uploads (**Open folder**, **Delete all**) and an activity log (date, time, IP address, device name, MAC address, device, action) that opens in Excel. Select a row and **Block device** to end that device's access ("Access ended" on its page).
+- First time: Windows asks whether to allow dl_remove_metadata on networks — allow **Private networks** (and set your Wi-Fi to Private in Settings → Network & internet). On a Mac, click **Allow** when asked about incoming connections.
+
 ## Updates
 
 **Check for Updates** opens a window showing this version and the latest on GitHub with its release notes, plus ffmpeg, ExifTool and the AI tag list with their status. **Update all** installs everything new in one click, **Check again** re-checks, **Release page** opens the release on GitHub. Once a week the app also updates ffmpeg, ExifTool and its list of AI tags by itself (into `%LOCALAPPDATA%\dl_remove_metadata`; the program folder stays as it is). When a new version of dl_remove_metadata is released here, it shows **Update Now**: one click downloads it and restarts the app.

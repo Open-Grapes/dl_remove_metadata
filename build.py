@@ -63,6 +63,7 @@ def pyinstaller():
                            "--add-data", f"{ICON};assets",
                            "--add-data", f"{ROOT / 'dlrm' / 'web_page.html'};dlrm",
                            "--collect-all", "tkinterdnd2",
+                           "--collect-submodules", "zeroconf", "--collect-submodules", "qrcode",
                            "--distpath", str(DIST), "--workpath", str(ROOT / "build"),
                            "--specpath", str(ROOT / "build"), str(ROOT / "run.py")])
 

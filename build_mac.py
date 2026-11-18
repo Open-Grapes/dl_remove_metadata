@@ -67,6 +67,7 @@ def pyinstaller():
        "--name", APP_NAME, "--icon", ICNS, "--osx-bundle-identifier", BUNDLE_ID,
        "--add-data", f"{ROOT / 'dlrm' / 'web_page.html'}:dlrm",
        "--collect-all", "tkinterdnd2",
+       "--collect-submodules", "zeroconf", "--collect-submodules", "qrcode",
        "--distpath", WORK / "dist", "--workpath", WORK / "work", "--specpath", WORK, ROOT / "run.py")
 
 
@@ -185,6 +186,10 @@ def smoke_test():
     assert cl.count("OK\t") == 3, f"expected 3 cleaned:\n{cl}"
     chk2 = out("--cli", "--check", t / "clip_camo.mp4", t / "photo_camo.jpg", t / "sub" / "gen 日本_camo.png")
     assert chk2.count("\tCLEAN\n") == 3, f"cleaned copies should be CLEAN:\n{chk2}"
+
+    # Share via Wi-Fi: acts like a phone on the network (upload, check, clean, download, block, turn off).
+    wifi = out("--cli", "--wifi-selftest", t / "photo.jpg", timeout=180)
+    assert "WIFI SELF-TEST PASSED" in wifi, f"Wi-Fi sharing self-test failed:\n{wifi}"
 
     # The window opens and stays up.
     p = subprocess.Popen([str(binary)])

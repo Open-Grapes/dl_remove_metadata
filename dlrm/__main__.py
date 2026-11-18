@@ -38,6 +38,9 @@ def cli(args):
     if args[:1] == ["--update"]:
         _print(updater.run_update())
         return 0
+    if args[:1] == ["--wifi-selftest"] and len(args) > 1:
+        from .wifi_selftest import run
+        return 0 if run(args[1], say=_print) else 1
     if args[:1] == ["--update-app"]:     # install a newer release of the app itself, if there is one
         v = updater.app_release_info().get("latest", "")
         if not v or not updater.newer(v, updater.APP_VERSION):

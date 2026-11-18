@@ -10,7 +10,7 @@ from tkinter import filedialog, messagebox, ttk
 
 from . import engine, shell, theme, trash, updater
 from .common import (APP_DIR, APP_NAME, APP_VERSION, FILE_MANAGER, IS_MAC, IS_WIN, LOG, load_settings,
-                     save_settings)
+                     open_path, save_settings)
 from .theme import MONO, UI
 
 TRASH = "Trash" if IS_MAC else "Recycle Bin"
@@ -83,6 +83,10 @@ class App(BaseTk):
         self.jobs = []
         self.rows = {}        # tree item -> {"file":..., "result":..., "sel": bool}
         self.mode = tk.StringVar(value=mode)
+        self.sharing = None          # web.Sharing while "Share via Wi-Fi" is on
+        self.wifi_win = None
+        self.wifi_admin = None
+        self._wifi_hidden = None     # the uploads count the reminder bar was hidden at
         self.dark = self.settings.get("theme") == "dark"
         self.pal = theme.apply(self, self.dark)
         self._build()
@@ -90,6 +94,8 @@ class App(BaseTk):
         self.after(100, self._pump)
         self.after(300, self._startup)
         self.after(60, lambda: theme.title_bar(self, self.dark))
+        self.after(1500, self.refresh_wifi_note, True)
+        self.protocol("WM_DELETE_WINDOW", self._close)
         if IS_MAC:   # files dropped on the Dock icon, or "Open With"
             self.createcommand("::tk::mac::OpenDocument", lambda *paths: self.add(paths))
         if files:
@@ -105,6 +111,18 @@ class App(BaseTk):
             ttk.Radiobutton(top, text=text, value=val, variable=self.mode, style="Toolbutton",
                             command=self._mode_changed).pack(side="left", padx=(0, 4), ipadx=10, ipady=3)
         ttk.Button(top, text="Clear list", command=self.clear).pack(side="right")
+        self.wifi_btn = ttk.Button(top, text="Share via Wi-Fi", command=self.open_wifi)
+        self.wifi_btn.pack(side="right", padx=(0, 8))
+
+        # reminder: files people uploaded over Wi-Fi are still on this computer
+        wb = self.wifi_note = ttk.Frame(self, padding=(12, 6, 12, 0))
+        self.wifi_note_lbl = ttk.Label(wb, style="Warn.TLabel")
+        self.wifi_note_lbl.pack(side="left")
+        ttk.Button(wb, text="Hide", command=self._hide_wifi_note).pack(side="right")
+        ttk.Button(wb, text="Admin…", command=self.open_wifi_admin).pack(side="right", padx=6)
+        ttk.Button(wb, text="Delete all…", command=lambda: self._wifi_delete_all()).pack(side="right")
+        ttk.Button(wb, text="Open folder", command=self._open_wifi_folder).pack(side="right", padx=6)
+        self._top = top
 
         self.drop = ttk.Label(self, style="Drop.TLabel", relief="groove", padding=18)
         self.drop.pack(fill="x", padx=12, pady=10)
@@ -201,6 +219,81 @@ class App(BaseTk):
             self.clean_sel_btn.pack_forget()
 
     # ------------------------------------------------------------ startup / updates
+    # ------------------------------------------------------------ Share via Wi-Fi
+    def open_wifi(self):
+        from .wifi_win import WifiWindow
+        if self.wifi_win is not None and self.wifi_win.alive():
+            self.wifi_win.win.lift()
+            self.wifi_win.win.focus_force()
+            return
+        self.wifi_win = WifiWindow(self)
+
+    def open_wifi_admin(self):
+        from .wifi_admin import AdminWindow
+        if self.wifi_admin is not None and self.wifi_admin.alive():
+            self.wifi_admin.win.lift()
+            self.wifi_admin.win.focus_force()
+            return
+        self.wifi_admin = AdminWindow(self)
+
+    def stop_sharing(self):
+        s, self.sharing = self.sharing, None
+        if s is not None:
+            threading.Thread(target=s.stop, daemon=True).start()
+        self.set_wifi_badge()
+
+    def set_wifi_badge(self):
+        on = self.sharing is not None
+        self.wifi_btn.configure(text="Wi-Fi sharing: on" if on else "Share via Wi-Fi",
+                                style="Accent.TButton" if on else "TButton")
+
+    def _open_wifi_folder(self):
+        from . import wifi_store
+        wifi_store.WORK.mkdir(parents=True, exist_ok=True)
+        open_path(wifi_store.WORK)
+
+    def _wifi_delete_all(self, parent=None):
+        from .wifi_admin import delete_all
+        delete_all(self, parent or self)
+
+    def _hide_wifi_note(self):
+        from . import wifi_store
+        self._wifi_hidden = wifi_store.stats()[0]
+        self.wifi_note.pack_forget()
+
+    def refresh_wifi_note(self, loop=False):
+        """Show the reminder bar while Wi-Fi uploads are stored (hidden until more arrive, if you press Hide)."""
+        from . import wifi_store
+
+        def work():
+            try:
+                n, size = wifi_store.stats()
+            except Exception:
+                n, size = 0, 0
+            self.events.put(("call", lambda: self._wifi_note_show(n, size)))
+        threading.Thread(target=work, daemon=True).start()
+        if loop:
+            self.after(10000, self.refresh_wifi_note, True)
+
+    def _wifi_note_show(self, n, size):
+        from .wifi_store import human
+        if self.wifi_win is not None and self.wifi_win.alive():
+            self.wifi_win.stored(n, size)
+        if n and (self._wifi_hidden is None or n > self._wifi_hidden):
+            self._wifi_hidden = None
+            self.wifi_note_lbl.configure(text=f"⚠  {n} Wi-Fi upload{'s' * (n != 1)} ({human(size)}) stored on "
+                                              "this computer. Delete them when you no longer need them.")
+            if not self.wifi_note.winfo_manager():
+                self.wifi_note.pack(fill="x", after=self._top)
+        elif not n:
+            self.wifi_note.pack_forget()
+
+    def _close(self):
+        if self.sharing is not None:
+            s, self.sharing = self.sharing, None
+            s.stop(linger=0)
+        self.destroy()
+
     def _startup(self):
         shell.clear_quarantine()
         if self.settings.get("menu", True):
@@ -375,6 +468,9 @@ class App(BaseTk):
         except queue.Empty:
             pass
         self.after(100, self._pump)
+
+    def _ev_call(self, fn):
+        fn()
 
     def _ev_versions(self, text):
         self.versions.configure(text=f"{APP_NAME} {APP_VERSION} · {text}")

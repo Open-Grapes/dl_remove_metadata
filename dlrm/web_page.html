@@ -70,6 +70,13 @@
   code { font-family: Consolas, monospace; font-size: 12px; }
   input[type=checkbox] { width: 16px; height: 16px; accent-color: var(--accent); }
   footer { margin-top: 18px; color: var(--muted); font-size: 12px; }
+  .hidden { display: none !important; }
+  #gone { position: fixed; inset: 0; z-index: 99; background: var(--bg); display: grid; place-items: center;
+          padding: 16px; text-align: center; }
+  #gone .ic { font-size: 44px; line-height: 1; }
+  #gone h2 { margin: 10px 0 6px; }
+  #gone p { color: var(--muted); max-width: 420px; margin: 0 auto 6px; }
+  #gone .small { font-size: 12.5px; }
   @media (max-width: 600px) {
     .row { grid-template-columns: 24px minmax(0, 1fr); }
     .row .acts { grid-column: 2; }
@@ -77,6 +84,8 @@
 </style>
 </head>
 <body>
+<div id="gone" class="hidden" role="alertdialog" aria-live="assertive"><div><div class="ic" id="gone-ic"></div><h2 id="gone-h"></h2>
+<p id="gone-p"></p><p class="small" id="gone-s"></p></div></div>
 <div class="wrap">
   <header>
     <img src="icon.png" alt="">
@@ -201,22 +210,59 @@ function render(r, pct) {
   if (cb) cb.onchange = () => { r.sel = cb.checked; refresh(); };
 }
 
+// ---------------------------------------------------------------- Wi-Fi: the computer ended sharing, or blocked this device
+let LAN = false, PC = "the computer", GONE = null, misses = 0, goneTimer = 0;
+function gone(kind) {
+  if (GONE === "blocked" && kind !== "blocked") return;
+  GONE = kind;
+  const T = {
+    off: ["⏻", "Wi-Fi sharing has ended", `${PC} stopped sharing, so this page no longer works.`,
+          "If sharing is turned back on, this page reconnects by itself."],
+    lost: ["📶", "Can't reach the computer", "Wi-Fi sharing was turned off, or this device left the Wi-Fi.",
+           "Trying again …"],
+    blocked: ["⛔", "Access ended", "The owner of this computer has ended your access to dl_remove_metadata.", ""]}[kind];
+  [$("#gone-ic").textContent, $("#gone-h").textContent, $("#gone-p").textContent, $("#gone-s").textContent] = T;
+  $("#gone").classList.remove("hidden");
+  queue.length = 0;
+  clearTimeout(goneTimer);
+  if (kind !== "blocked") goneTimer = setTimeout(retry, 5000);
+}
+async function retry() {          // back on (or back on the Wi-Fi): start fresh
+  try { const r = await fetch("api/info", { headers: H, cache: "no-store" }); if (r.ok) return location.reload();
+        const j = await r.json().catch(() => ({})); if (j.blocked) return gone("blocked"); if (j.ended) gone("off"); } catch {}
+  goneTimer = setTimeout(retry, 5000);
+}
+function seeGone(j) { if (j && j.blocked) gone("blocked"); else if (j && j.ended) gone("off"); }
+
 function upload(r) {
   return new Promise((res, rej) => {
+    if (GONE) return rej(new Error($("#gone-h").textContent));
     const x = new XMLHttpRequest();
     x.open("POST", "api/upload?name=" + encodeURIComponent(r.name));
     x.setRequestHeader("X-Token", TOKEN);
     x.upload.onprogress = e => { if (e.lengthComputable) render(r, Math.round(e.loaded / e.total * 100)); };
-    x.onload = () => x.status === 200 ? res(JSON.parse(x.responseText)) : rej(new Error(x.responseText || "upload failed"));
-    x.onerror = () => rej(new Error("The local server stopped. Open the dl_remove_metadata (Web) launcher again."));
+    x.onload = () => {
+      let j = null; try { j = JSON.parse(x.responseText); } catch {}
+      if (x.status === 200 && j) return res(j);
+      seeGone(j); rej(new Error((j && j.error) || x.responseText || "upload failed"));
+    };
+    x.onerror = () => { if (LAN && ++misses >= 2) gone("lost");
+      rej(new Error(LAN ? "The upload failed (is the computer still sharing?)" :
+                          "The local server stopped. Open the dl_remove_metadata (Web) launcher again.")); };
     x.send(r.file);
   });
 }
 
 async function api(path, body) {
-  const resp = await fetch(path, { method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: JSON.stringify(body) });
-  if (!resp.ok) throw new Error((await resp.text()) || resp.statusText);
-  return resp.json();
+  if (GONE) throw new Error($("#gone-h").textContent);
+  let resp;
+  try { resp = await fetch(path, { method: "POST", headers: { ...H, "Content-Type": "application/json" }, body: JSON.stringify(body) }); }
+  catch (e) { if (LAN && ++misses >= 2) gone("lost"); throw e; }
+  misses = 0;
+  const j = await resp.json().catch(() => null);
+  seeGone(j);
+  if (!resp.ok) throw new Error((j && j.error) || resp.statusText);
+  return j;
 }
 
 async function pump() {
@@ -283,11 +329,23 @@ $("#clear").onclick = () => {
   refresh();
 };
 
-// Keep the local server alive while this page is open.
-setInterval(() => fetch("api/heartbeat", { headers: H }).catch(() => {}), 15000);
-fetch("api/info", { headers: H }).then(r => r.json())
-  .then(i => $("#foot").textContent = `${i.app} ${i.version} · ${i.tools}`)
-  .catch(() => $("#foot").textContent = "Couldn't reach the local server. Open the dl_remove_metadata (Web) launcher again.");
+// Keep the local server alive while this page is open; on Wi-Fi, also notice quickly when sharing ends.
+async function heartbeat() {
+  if (GONE) return;
+  try {
+    const r = await fetch("api/heartbeat", { headers: H, cache: "no-store" });
+    misses = 0;
+    if (!r.ok) seeGone(await r.json().catch(() => null));
+  } catch { if (LAN && ++misses >= 2) gone("lost"); }
+}
+fetch("api/info", { headers: H }).then(r => r.json().then(j => { if (!r.ok) { seeGone(j); throw new Error(); } return j; }))
+  .then(i => {
+    LAN = !!i.lan; PC = i.pc || PC;
+    $("#foot").textContent = `${i.app} ${i.version} · ${i.tools}`;
+    if (LAN) $(".sub").textContent = `Shared over Wi-Fi from ${PC}. Your files are uploaded to that computer and cleaned there.`;
+    setInterval(heartbeat, LAN ? 4000 : 15000);
+  })
+  .catch(() => { if (!GONE) $("#foot").textContent = "Couldn't reach the computer. Open the address again."; });
 </script>
 </body>
 </html>

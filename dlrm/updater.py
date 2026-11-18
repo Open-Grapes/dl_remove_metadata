@@ -60,7 +60,11 @@ def final_url(url, timeout=20):
 
 
 def _vtuple(v):
-    return tuple(int(x) for x in re.findall(r"\d+", v or ""))
+    """'1.1' -> (1, 1); trailing zeros don't count, so 1.1 and 1.1.0 are the same version."""
+    t = [int(x) for x in re.findall(r"\d+", v or "")]
+    while t and t[-1] == 0:
+        t.pop()
+    return tuple(t)
 
 
 def newer(a, b):
