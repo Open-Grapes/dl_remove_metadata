@@ -73,7 +73,7 @@ def sound(ok):
 class App(BaseTk):
     def __init__(self, files=(), mode="remove"):
         super().__init__()
-        self.title(f"{APP_NAME}  v{APP_VERSION}")
+        self.title(f"{APP_NAME} (v{APP_VERSION})")
         self.geometry("900x600")
         self.minsize(700, 460)
         set_icon(self)
