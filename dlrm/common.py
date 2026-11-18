@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 
 APP_NAME = "dl_remove_metadata"
-APP_VERSION = "1.1"
+APP_VERSION = "1.2"
 
 # GitHub repository this app is published from (tag "v" + version,
 # with dl_remove_metadata-windows.zip attached). Used for "Update Now".

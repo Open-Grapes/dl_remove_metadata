@@ -73,7 +73,7 @@ def sound(ok):
 class App(BaseTk):
     def __init__(self, files=(), mode="remove"):
         super().__init__()
-        self.title(APP_NAME)
+        self.title(f"{APP_NAME}  v{APP_VERSION}")
         self.geometry("900x600")
         self.minsize(700, 460)
         set_icon(self)
@@ -180,9 +180,6 @@ class App(BaseTk):
         self.versions.pack(side="left")
         self.update_now_btn = ttk.Button(bottom, text="Update Now", command=self.update_now)
         ttk.Button(bottom, text="Check for Updates", command=self.check_updates).pack(side="right")
-        self.menu_var = tk.BooleanVar(value=False)
-        ttk.Checkbutton(bottom, text="Finder Quick Actions" if IS_MAC else "Right-click menu", variable=self.menu_var,
-                        command=self.toggle_menu).pack(side="right", padx=10)
 
         if DND_FILES:
             for w in (self, self.drop, self.tree):
@@ -296,13 +293,8 @@ class App(BaseTk):
 
     def _startup(self):
         shell.clear_quarantine()
-        if self.settings.get("menu", True):
-            try:
-                shell.install_menu()
-            except OSError:
-                pass
         try:
-            self.menu_var.set(shell.menu_installed())
+            shell.install_menu()      # right-click menu / Finder Quick Actions follow the app wherever it is
         except OSError:
             pass
         self._show_versions()
@@ -325,18 +317,6 @@ class App(BaseTk):
 
     def update_now(self):
         self.check_updates()
-
-    def toggle_menu(self):
-        try:
-            if self.menu_var.get():
-                shell.install_menu()
-                self.settings["menu"] = True
-            else:
-                shell.remove_menu()
-                self.settings["menu"] = False
-            save_settings(self.settings)
-        except OSError as e:
-            messagebox.showerror(APP_NAME, f"Couldn't change the right-click menu:\n{e}")
 
     # ------------------------------------------------------------ keep / remove originals
     def originals_changed(self):

@@ -78,7 +78,9 @@ Click **Share via Wi-Fi** at the top of the window. It shows a QR code and an ad
 
 **Check for Updates** opens a window showing this version and the latest on GitHub with its release notes, plus ffmpeg, ExifTool and the AI tag list with their status. **Update all** installs everything new in one click, **Check again** re-checks, **Release page** opens the release on GitHub. Once a week the app also updates ffmpeg, ExifTool and its list of AI tags by itself (into `%LOCALAPPDATA%\dl_remove_metadata`; the program folder stays as it is). When a new version of dl_remove_metadata is released here, it shows **Update Now**: one click downloads it and restarts the app.
 
-To remove the right-click menu, untick **Right-click menu** at the bottom of the window. To uninstall, untick it, then delete the program folder and `%LOCALAPPDATA%\dl_remove_metadata`.
+The window title shows which version you have (e.g. `dl_remove_metadata v1.2`).
+
+To uninstall on Windows, run `dl_remove_metadata.exe --remove-menu` once (removes the right-click menu), then delete the program folder and `%LOCALAPPDATA%\dl_remove_metadata`. On a Mac, delete the app plus **Remove Metadata.workflow** and **Check for AI Tags.workflow** from `~/Library/Services`.
 
 ## Limits
 

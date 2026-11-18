@@ -40,8 +40,15 @@ class UpdateDialog(tk.Toplevel):
         self.pal = app.pal
         p = self.pal
         self.title("Check for updates")
-        self.geometry("760x640")
         self.minsize(600, 520)
+        # open centred over the main window (kept on screen)
+        app.update_idletasks()
+        w, h = 760, 640
+        x = app.winfo_rootx() + (app.winfo_width() - w) // 2
+        y = app.winfo_rooty() + (app.winfo_height() - h) // 2
+        x = min(max(x, 0), max(self.winfo_screenwidth() - w, 0))
+        y = min(max(y, 0), max(self.winfo_screenheight() - h - 40, 0))
+        self.geometry(f"{w}x{h}+{x}+{y}")
         self.configure(bg=p["bg"])
         self.transient(app)
         self.status = None
